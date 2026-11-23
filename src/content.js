@@ -383,6 +383,7 @@
       <div class="peek ${judge}" aria-hidden="true">
         <div class="peek-head">${img(`characters/${judge}.png`)}</div>
         <i class="sleeve l"></i><i class="sleeve r"></i><i class="cuff l"></i><i class="cuff r"></i>
+        ${judge === "judge-1" ? "" : img("ui/bench-gavel.svg", "peek-gavel")}
         <span class="paw l"><i></i><i></i><i></i></span><span class="paw r"><i></i><i></i><i></i></span>
         ${recent ? `<span class="hmph">Hmph. Again?</span>` : ""}
       </div>`;
@@ -530,7 +531,9 @@
           <div class="stage" id="stage" aria-hidden="true">
             ${pillars}<i class="floor"></i>
             ${img("ui/bench-shadow.svg", "bench-shadow")}
-            <div class="judge-seat ${judge}">${img(`characters/${judge}.png`, "judge-art")}${img("ui/bench.svg", "bench")}</div>
+            <div class="judge-seat ${judge}">${img(`characters/${judge}.png`, "judge-art")}${img("ui/bench.svg", "bench")}${
+              judge === "judge-1" ? "" : img("ui/bench-gavel.svg", "bench gavel") /* judge 1 holds its own */
+            }</div>
             ${img("ui/your-shadow.svg", "you-shadow")}
             ${img(`characters/${defendantArt(settings)}.png`, "you-art")}
             <div class="tag judge-tag">
@@ -938,6 +941,7 @@ img { display: block; flex: none; }
 .sleeve.l { left: 0; } .sleeve.r { left: 87px; }
 .cuff { position: absolute; top: 70px; width: 8px; height: 30px; background: var(--cuff); border-block: 1px solid var(--robe); }
 .cuff.l { left: 47px; } .cuff.r { left: 123px; }
+.peek-gavel { position: absolute; left: 14px; top: -22px; width: 150px; height: 140px; transform: scale(1.7) rotate(-12deg); transform-origin: 124px 76px; }
 .paw { position: absolute; top: 68px; width: 34px; height: 34px; border-radius: 17px; background: #FDA3A5; border: 1.6px solid #2A2E35; display: flex; gap: 4px; align-items: flex-end; justify-content: center; padding-bottom: 5.6px; }
 .paw.l { left: 55px; } .paw.r { left: 89px; }
 .paw i { width: 1.5px; height: 9px; border-radius: 1px; background: #2A2E35; }
@@ -1080,6 +1084,7 @@ label input:focus { border-color: var(--blue); }
 .bench-shadow { right: 51px; top: 167px; width: 210px; height: 44px; }
 .judge-seat { right: 81px; top: 47px; width: 150px; height: 140px; }
 .judge-seat .bench { position: absolute; inset: 0; width: 150px; height: 140px; }
+.judge-seat .bench.gavel { transform: scale(1.6); transform-origin: 124px 88px; }
 .judge-seat .judge-art { position: absolute; transform-origin: 50% 100%; transition: transform .25s ease-out; }
 .judge-seat.judge-1 .judge-art { left: 15px; top: 2px; width: 120px; }
 .judge-seat.judge-2 .judge-art { left: 23px; top: 0; width: 104px; }
