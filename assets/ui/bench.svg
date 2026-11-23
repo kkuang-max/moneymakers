@@ -1,0 +1,11 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="150" height="140" viewBox="0 0 150 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Bench">
+<path id="Vector_15" d="M138 88H12C8.68629 88 6 90.6863 6 94V132C6 135.314 8.68629 138 12 138H138C141.314 138 144 135.314 144 132V94C144 90.6863 141.314 88 138 88Z" fill="#B08A65" stroke-width="2" stroke="#6B4A2B"/>
+<path id="Vector_16" d="M139 88H11C8.23858 88 6 90.2386 6 93C6 95.7614 8.23858 98 11 98H139C141.761 98 144 95.7614 144 93C144 90.2386 141.761 88 139 88Z" fill="#6B4A2B"/>
+<path id="Vector_17" d="M75 127C81.0751 127 86 122.075 86 116C86 109.925 81.0751 105 75 105C68.9249 105 64 109.925 64 116C64 122.075 68.9249 127 75 127Z" fill="#F4ECE3" stroke-width="2" stroke="#6B4A2B"/>
+<g id="Vector_18">
+<path d="M70 116H80ZM75 111V121Z" fill="black"/>
+<path d="M70 116H80M75 111V121" stroke-width="2" stroke-linecap="round" stroke="#6B4A2B"/>
+</g>
+</g>
+</svg>

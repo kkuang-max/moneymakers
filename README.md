@@ -78,6 +78,8 @@ None of these affect scripted mode. For that, edit `LINES` and `QUESTIONS` in `s
 | `src/script.js` | Scripted court: questions, reactions, witness lines, verdict reasons |
 | `src/content.js` | Finds the item, pauses the checkout button, draws every screen (shadow DOM) |
 | `src/background.js` | AI court (Anthropic or OpenRouter) and the Urbanist font |
+| `assets/characters/` | Judge and defendant art from the Figma "Character" sheet. One judge is picked at random per check-in; the defendant is set in Settings |
+| `assets/ui/` | Pop-up border, medallion, courtroom bench and icons from the Figma |
 | `personality/` | Judge and witness personalities, plus example trials, for AI mode |
 | `options.*`, `popup.*`, `ui.css` | Settings page and toolbar popup |
 | `test/` | Mock Amazon cart and product pages for offline testing |

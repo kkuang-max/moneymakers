@@ -45,6 +45,17 @@
 
   const log = (...args) => console.log("[MM]", ...args);
 
+  // ---------- characters (Figma "Character" sheet) ----------
+  // Art lives in assets/ and is exposed to the page via web_accessible_resources.
+  const asset = (p) => chrome.runtime.getURL(`assets/${p}`);
+  const img = (p, cls = "") => `<img class="${cls}" src="${asset(p)}" alt="" draggable="false" />`;
+  // Two judges. One is picked per check-in, and the same one presides over the trial.
+  const JUDGES = ["judge-1", "judge-2"];
+  let judge = JUDGES[0];
+  const pickJudge = () => (judge = JUDGES[Math.floor(Math.random() * JUDGES.length)]);
+  // Two defendants, chosen in Settings ("Your character in court").
+  const defendantArt = (settings) => (settings.defendant === "2" ? "defendant-2" : "defendant-1");
+
   function labelOf(el) {
     const ids = (el.getAttribute("aria-labelledby") || "").split(/\s+/).filter(Boolean);
     const labelled = ids.map((id) => document.getElementById(id)?.textContent || "").join(" ");
@@ -235,9 +246,14 @@
     host.style.inset = "auto";
   }
   // Quick check sits top-right over the page. Everything else takes over the page.
-  function showPanel(html) {
+  // Pop-ups use the "banknote" frame: ink outline plus an engraved border.
+  // `top` is drawn above the pop-up (the judge leaning over it).
+  function showPanel(html, top = "") {
     host.style.inset = "0 0 auto auto";
-    layer.innerHTML = `<div class="panel-wrap"><div class="panel" role="dialog">${html}</div></div>`;
+    layer.innerHTML = `<div class="panel-wrap${top ? " has-top" : ""}"><div class="panel-box">${top}<div class="panel" role="dialog">${img(
+      "ui/engraved-border.svg",
+      "engraved"
+    )}${html}</div></div></div>`;
   }
   function showPage(html, cls = "") {
     host.style.inset = "0";
@@ -311,7 +327,10 @@
     };
   }
 
-  const bar = (pct) => `<div class="bar"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></div>`;
+  const clamp = (pct) => Math.max(0, Math.min(100, pct));
+  // `preview` draws a faint segment showing where the bar would get to if you skip it.
+  const bar = (pct, preview) =>
+    `<div class="bar">${preview != null ? `<i class="pre" style="width:${clamp(preview)}%"></i>` : ""}<i style="width:${clamp(pct)}%"></i></div>`;
 
   // The goal card used on the quick check ("before") and the saved screens ("after").
   function goalCard(profile, m, mode) {
@@ -322,7 +341,7 @@
       return `<div class="card goal">
         <div class="tiny">Saved for ${esc(g.name)} so far</div>
         <div class="amount"><b>${money(value)}</b><span>of ${money(m.target)}</span></div>
-        ${bar(pct)}
+        ${bar(pct, mode === "before" ? m.pctAfter : null)}
         <div class="bar-foot"><span>${pct}% there</span>${
           mode === "before" ? `<span class="blue">Skip it → ${m.pctAfter}%</span>` : `<span>${money(Math.max(m.target - value, 0))} to go</span>`
         }</div>
@@ -333,7 +352,7 @@
         mode === "before" ? `<button class="chip gold" data-act="setgoal">+ Set a goal</button>` : ""
       }</div>
       <div class="amount"><b>${money(value)}</b><span>· next milestone ${money(m.target)}</span></div>
-      ${bar(pct)}
+      ${bar(pct, mode === "before" ? m.pctAfter : null)}
       <div class="bar-foot"><span>${pct}% of the way</span>${mode === "before" ? `<span class="blue">Skip it → ${m.pctAfter}%</span>` : ""}</div>
     </div>`;
   }
@@ -355,22 +374,33 @@
     const the = item.items.length > 1 ? "this cart" : `the ${short}`;
     const price = money(item.total, item.currency);
     const hint = m.milestone
-      ? `<div class="hint">${ICON.star}<span>This would ${m.hasGoal ? (m.pctAfter >= 100 ? "finish your goal" : "get you past halfway") : `push you past ${money(m.target)} saved`}</span></div>`
+      ? `<div class="hint"><span class="hint-icon">${img("ui/star.svg")}</span><span>This would ${m.hasGoal ? (m.pctAfter >= 100 ? "finish your goal" : "get you past halfway") : `push you past ${money(m.target)} saved`}</span></div>`
       : "";
+    // The judge leans over the pop-up. "Hmph. Again?" if you've been here this week.
+    pickJudge();
+    const recent = history.some((h) => Date.now() - (h.date || 0) < 7 * 24 * 60 * 60 * 1000);
+    const peek = `
+      <div class="peek ${judge}" aria-hidden="true">
+        <div class="peek-head">${img(`characters/${judge}.png`)}</div>
+        <i class="sleeve l"></i><i class="sleeve r"></i><i class="cuff l"></i><i class="cuff r"></i>
+        ${judge === "judge-1" ? "" : img("ui/bench-gavel.svg", "peek-gavel")}
+        <span class="paw l"><i></i><i></i><i></i></span><span class="paw r"><i></i><i></i><i></i></span>
+        ${recent ? `<span class="hmph">Hmph. Again?</span>` : ""}
+      </div>`;
     showPanel(`
-      <div class="panel-head"><span>Quick check</span><button class="icon-btn" data-act="close" aria-label="Close">${ICON.x}</button></div>
+      <div class="panel-head"><span>Quick check</span><button class="icon-btn" data-act="close" aria-label="Close">${img("ui/close.svg")}</button></div>
       ${goalCard(profile, m, "before")}
-      <h2 class="h2">Do you really need it?</h2>
-      <p class="muted">${
-        m.hasGoal ? `If you skip ${esc(the)}, ${price} goes to ${esc(profile.goal.name)} instead.` : `If you skip ${esc(the)}, that's ${price} straight into your savings.`
-      }</p>
+      <div class="question">
+        <h2 class="h3">Do you really need it?</h2>
+        <p class="muted">${
+          m.hasGoal ? `If you skip ${esc(the)}, ${price} goes to ${esc(profile.goal.name)} instead.` : `If you skip ${esc(the)}, that's ${price} straight into your savings.`
+        }</p>
+      </div>
       ${note ? `<p class="note">${esc(note)}</p>` : ""}
       ${hint}
-      <div class="stack">
-        <button class="btn primary" data-act="save">You're right. I'll save it</button>
-        <button class="btn outline" data-act="court">Yes, I want it</button>
-      </div>
-      <button class="link" data-act="never">Never ask about this item</button>`);
+      <button class="btn primary" data-act="save">You’re right, I’ll save it</button>
+      <button class="btn outline" data-act="court">Yes, I want it<span class="sticker">${img("ui/gavel.svg")}Goes to court</span></button>
+      <button class="btn ghost" data-act="never">Never ask about this item</button>`, peek);
     $("[data-act=save]").focus();
     // Flow step 3, "Not now": the X lets the order go through, no guilt message.
     on("[data-act=close]", async () => {
@@ -400,10 +430,10 @@
     const by = profile.goal?.by ? new Date(`${profile.goal.by}T00:00`).toLocaleDateString([], { month: "short", day: "numeric" }) : "";
     const html = `
       <div class="confetti" aria-hidden="true">${CONFETTI}</div>
-      <div class="seal blue">${ICON.dollar}</div>
+      ${img("ui/medallion.svg", "medallion")}
       <h2 class="h2 center">Nice, you just saved ${money(item.total, item.currency)}</h2>
       ${goalCard(profile, m, "after")}
-      ${m.milestone ? `<div class="hint box">${ICON.star}<span>Milestone: ${esc(m.milestone)}</span></div>` : ""}
+      ${m.milestone ? `<div class="hint box"><span class="hint-icon">${img("ui/star.svg")}</span><span>Milestone: ${esc(m.milestone)}</span></div>` : ""}
       ${
         m.hasGoal
           ? ""
@@ -491,30 +521,43 @@
     const state = { answers: [], round: 1, totalRounds: flow.RULES.rounds, witnessCalled: false, witness: null };
     let warned = false;
 
+    // E07 "Courtroom rounds": a battle-style stage (the judge at the bench, you
+    // seen from behind), a status row, the judge's current line and your answer box.
+    const pillars = [6.4, 19.5, 83.1, 96.2].map((x) => `<i class="pillar" style="left:calc(${x}% - 13px)"></i>`).join("");
     showPage(`
       <div class="topbar"><span id="round"></span><button class="chip-btn" data-act="leave">Leave trial ${ICON.x}</button></div>
       <div class="court-stage">
-        <div class="scene" id="scene" aria-hidden="true">
-          <div class="seal-wall">${ICON.scale}</div>
-          <div class="spot witness" data-who="witness">
-            <div class="figure">${FIGURE.witness}<span class="speech"><i></i><i></i><i></i></span></div>
-            <div class="stand"><span class="plate">Witness stand</span></div>
+        <div class="battle">
+          <div class="stage" id="stage" aria-hidden="true">
+            ${pillars}<i class="floor"></i>
+            ${img("ui/bench-shadow.svg", "bench-shadow")}
+            <div class="judge-seat ${judge}">${img(`characters/${judge}.png`, "judge-art")}${img("ui/bench.svg", "bench")}${
+              judge === "judge-1" ? "" : img("ui/bench-gavel.svg", "bench gavel") /* judge 1 holds its own */
+            }</div>
+            ${img("ui/your-shadow.svg", "you-shadow")}
+            ${img(`characters/${defendantArt(settings)}.png`, "you-art")}
+            <div class="tag judge-tag">
+              <div class="tag-title"><b>The Judge</b><span>on the bench</span></div>
+              <div class="patience"><small>PATIENCE</small><div class="pbar"><i id="patience"></i></div></div>
+            </div>
+            <div class="tag you-tag"><div class="tag-title"><b>You</b><span>the defendant</span></div></div>
+            <span class="impact"><i></i><i></i><i></i></span>
+            <span class="hmm">Hmm!</span>
           </div>
-          <div class="spot judge" data-who="judge">
-            <div class="figure">${FIGURE.judge}<span class="speech"><i></i><i></i><i></i></span></div>
-            <div class="bench"><span class="plate">The judge</span></div>
+          <div class="status-row">
+            <span class="verdict-chip" id="chip" hidden></span>
+            <button type="button" class="transcript-btn" data-act="transcript" aria-expanded="false">${img("ui/clock.svg")}<span id="tcount">Transcript</span></button>
           </div>
-          <div class="spot defendant" data-who="defendant">
-            <div class="figure">${FIGURE.defendant}<span class="speech"><i></i><i></i><i></i></span></div>
-            <div class="table"><span class="plate">You</span></div>
+          <div class="transcript" id="log" role="log" aria-label="Transcript" hidden></div>
+          <div class="witness-card" id="witness" hidden></div>
+          <div class="prompt" aria-live="polite">
+            <small>THE JUDGE</small>
+            <p id="prompt"></p>
+            ${img("ui/next.svg", "next")}
           </div>
-        </div>
-        <div class="chat" role="log" aria-label="Courtroom">
-          <div class="chat-head"><span class="av judge">${ICON.scale}</span><span><b>The judge</b><small>Hearing your case for ${item.items.length > 1 ? "this cart" : `the ${esc(short)}`}</small></span></div>
-          <div class="log" id="log" aria-live="polite"></div>
           <form class="composer" id="composer">
-            <input id="answer" autocomplete="off" placeholder="Make your case" disabled />
-            <button class="send" aria-label="Send" disabled>${ICON.send}</button>
+            <input id="answer" autocomplete="off" placeholder="Type your answer to the judge…" aria-label="Your answer to the judge" disabled />
+            <button class="send" aria-label="Send" disabled>${img("ui/arrow.svg")}</button>
           </form>
         </div>
         <p class="fine">No right or wrong answers. The verdict is advice. You always decide.</p>
@@ -524,8 +567,19 @@
     const input = $("#answer");
     const send = $(".send");
     const roundEl = $("#round");
+    const promptEl = $("#prompt");
+    const witnessEl = $("#witness");
+    const chipEl = $("#chip");
     const setRound = () => (roundEl.textContent = `Round ${state.round} of ${state.totalRounds}`);
     setRound();
+    // The judge's patience follows the running score: good answers fill it, weak ones drain it.
+    const setPatience = () => ($("#patience").style.width = `${Math.max(8, Math.min(100, 55 + flow.score(state) * 10))}%`);
+    setPatience();
+    on("[data-act=transcript]", (e) => {
+      logEl.hidden = !logEl.hidden;
+      e.currentTarget.setAttribute("aria-expanded", String(!logEl.hidden));
+      logEl.scrollTop = logEl.scrollHeight;
+    });
 
     // Flow: "Leave trial" (any round) -> back to cart, no verdict.
     on("[data-act=leave]", () => {
@@ -536,48 +590,67 @@
       if (pageType() === "checkout") location.href = `${location.origin}/cart`;
     });
 
-    const scroll = () => (logEl.scrollTop = logEl.scrollHeight);
-    // Courtroom scene: whoever is talking stands up and gets the highlight.
-    const scene = $("#scene");
-    function setSpeaker(who, thinking = false) {
-      for (const spot of scene.querySelectorAll(".spot")) {
-        spot.classList.toggle("talking", spot.dataset.who === who);
-        spot.classList.toggle("thinking", thinking && spot.dataset.who === who);
+    const stage = $("#stage");
+    const WHO = { judge: "The judge", defendant: "You", court: "The court" };
+    // Every line goes into the transcript drawer. Only the latest judge line and
+    // witness testimony are on screen.
+    function record(role, text) {
+      transcript.push({ role, text });
+      const row = document.createElement("p");
+      row.className = `line ${role}`;
+      row.innerHTML = `<b>${esc(role === "witness" ? state.witness.name : WHO[role])}</b> ${esc(text)}`;
+      logEl.appendChild(row);
+      logEl.scrollTop = logEl.scrollHeight;
+      $("#tcount").textContent = `Transcript · ${transcript.length} line${transcript.length === 1 ? "" : "s"}`;
+    }
+    function showWitness(body) {
+      const w = state.witness;
+      const extra = w.role.split(" · ").slice(1).join(" · ");
+      witnessEl.className = `witness-card ${w.id}`;
+      witnessEl.innerHTML = `<span class="w-icon">${img(w.id === "future" ? "ui/w-future.svg" : "ui/w-history.svg")}</span>
+        <div class="testimony"><small>EXPERT WITNESS${extra ? ` · ${esc(extra.toUpperCase())}` : ""}</small><b>${esc(w.name)}</b>${body}</div>`;
+      witnessEl.hidden = false;
+      stage.classList.add("short");
+    }
+    function say(role, text) {
+      record(role, text);
+      if (role === "judge") promptEl.textContent = text;
+      else if (role === "witness") showWitness(`<p>${esc(text)}</p>`);
+      else if (role === "defendant") {
+        // the witness steps down once you've answered their testimony
+        witnessEl.hidden = true;
+        stage.classList.remove("short");
+        // impact marks next to you when you make your point
+        stage.classList.remove("hit");
+        void stage.offsetWidth;
+        stage.classList.add("hit");
       }
     }
-    function say(role, text, opts = {}) {
-      transcript.push({ role, text });
-      setSpeaker(role);
-      const row = document.createElement("div");
-      if (role === "defendant") {
-        row.className = "msg me";
-        row.innerHTML = `<div class="bubble">${esc(text)}</div>`;
-      } else if (role === "witness") {
-        row.className = "msg witness";
-        row.innerHTML = `<span class="av gold">${ICON.witness}</span><div><div class="who">${esc(state.witness.name)} <span>· ${esc(state.witness.role)}</span></div><div class="bubble">${esc(text)}</div></div>`;
-      } else {
-        row.className = "msg judge";
-        row.innerHTML = `<span class="av judge">${ICON.scale}</span><div class="bubble${opts.question ? " q" : ""}">${esc(text)}</div>`;
-      }
-      logEl.appendChild(row);
-      scroll();
+    // Key moments (witness, recess, ruling) and how your last answer landed show in the status chip.
+    function chip(text, tone) {
+      chipEl.hidden = false;
+      chipEl.className = `verdict-chip ${tone}`;
+      chipEl.innerHTML = `${tone === "good" ? img("ui/check.svg") : ""}<span>${esc(text)}</span>`;
     }
     function moment(text) {
-      transcript.push({ role: "court", text });
-      const row = document.createElement("div");
-      row.className = "moment";
-      row.textContent = text;
-      logEl.appendChild(row);
-      scroll();
+      record("court", text);
+      chip(text, "info");
     }
+    const LANDED = {
+      strong: ["That answer landed", "good"],
+      good: ["That answer landed", "good"],
+      neutral: ["Noted", "meh"],
+      weak: ["That one didn't land", "bad"],
+      impulse: ["Sounds like an impulse", "bad"],
+    };
     function typing(who = "judge") {
-      setSpeaker(who, true);
-      const row = document.createElement("div");
-      row.className = `msg ${who} typing`;
-      row.innerHTML = `<span class="av ${who === "witness" ? "gold" : "judge"}">${who === "witness" ? ICON.witness : ICON.scale}</span><div class="bubble"><i></i><i></i><i></i></div>`;
-      logEl.appendChild(row);
-      scroll();
-      return () => row.remove();
+      const dots = `<span class="dots"><i></i><i></i><i></i></span>`;
+      if (who === "witness") showWitness(dots);
+      else {
+        stage.classList.add("thinking");
+        promptEl.innerHTML = dots;
+      }
+      return () => stage.classList.remove("thinking");
     }
     const readPause = (t) => wait(Math.min(1400, 350 + t.length * 12));
     const fallbackNote = (err) => {
@@ -612,11 +685,10 @@
     const open = await ask("open");
     say("judge", open.opening);
     await readPause(open.opening);
-    say("judge", open.question, { question: true });
+    say("judge", open.question);
     openInput();
 
     input.addEventListener("keydown", (e) => e.stopPropagation()); // keep the store's shortcuts out of it
-    input.addEventListener("input", () => input.value && setSpeaker("defendant", true));
     $("#composer").onsubmit = async (e) => {
       e.preventDefault();
       const answer = input.value.trim();
@@ -629,6 +701,8 @@
       if (state.left) return;
       state.answers.push({ text: answer, strength: r.strength, engaged: r.engaged !== false, unsure: !!r.unsure, claim: r.claim });
       log("Answer scored", r.strength, r.claim, r.engaged ? "" : "(low effort)", "score", flow.score(state));
+      setPatience();
+      chip(...(LANDED[r.strength] || LANDED.neutral));
       say("judge", r.acknowledge);
       await readPause(r.acknowledge);
 
@@ -643,9 +717,6 @@
         moment(step.moment);
         state.witnessCalled = true;
         state.witness = flow.pickWitness(state);
-        const stand = scene.querySelector(".spot.witness");
-        stand.classList.add("called");
-        stand.querySelector(".plate").textContent = state.witness.name;
         await wait(600);
         const w = await ask("witness", { witness: state.witness }, "witness");
         say("witness", w.says);
@@ -653,7 +724,7 @@
         state.round += 1;
         setRound();
         const q = await ask("after_witness", { witness: state.witness });
-        say("judge", q.question, { question: true });
+        say("judge", q.question);
         return openInput();
       }
       if (step.action === "recess") {
@@ -662,7 +733,7 @@
       }
       state.round += 1;
       setRound();
-      say("judge", r.question, { question: true });
+      say("judge", r.question);
       openInput();
     };
   }
@@ -680,10 +751,10 @@
     ].filter(Boolean);
     showPage(`
       <div class="card-lg">
-        <div class="seal soft ring">${ICON.scale}</div>
+        <div class="rocking">${img("ui/scale.svg")}</div>
         <h2 class="h2 center">The court is deliberating…</h2>
         <p class="muted center">Hang tight, this takes a few seconds.</p>
-        <ul class="checks">${steps.map(([t, s]) => `<li><span class="tick"></span><span><b>${esc(t)}</b>${s ? `<small>${esc(s)}</small>` : ""}</span></li>`).join("")}</ul>
+        <ul class="checks">${steps.map(([t, s]) => `<li><span class="tick">${img("ui/tick.svg")}</span><span><b>${esc(t)}</b>${s ? `<small>${esc(s)}</small>` : ""}</span></li>`).join("")}</ul>
       </div>`, "centered");
     const reasonP = courtTurn("verdict", ctx({ verdict }), settings);
     // Paced so each check reads as real work: about 1.5s per step, then a beat.
@@ -716,7 +787,7 @@
         <div class="reason r-${V.box}">${esc(reason)}</div>
         ${goalLine(profile)}
         <button class="btn primary" data-act="primary">${esc(V.primary)}</button>
-        <button class="link" data-act="secondary">${esc(V.secondary)}</button>
+        <button class="btn ghost" data-act="secondary">${esc(V.secondary)}</button>
       </div>`, "centered");
     $("[data-act=primary]").focus();
     const record = { where: "courtroom", verdict, transcript };
@@ -803,36 +874,19 @@
   const ICON = {
     scale: svg('<path d="M12 4v16M8 20h8M5 7h14M12 4l-1 3h2z"/><path d="M5 7l-3 6a3 3 0 0 0 6 0L5 7zM19 7l-3 6a3 3 0 0 0 6 0l-3-6z"/>'),
     check: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 'stroke-width="2.4"'),
-    clock: svg('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
-    dollar: svg('<path d="M12 3v18M16.5 7.5c-.8-1.3-2.4-2-4.5-2-2.6 0-4.3 1.3-4.3 3.2 0 4.6 9 2.4 9 7 0 2-1.9 3.3-4.6 3.3-2.3 0-4-.8-4.8-2.3"/>', 'stroke-width="2.2"'),
     x: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
-    send: svg('<path d="M5 12h13M13 6l6 6-6 6"/>', 'stroke-width="2.2"'),
-    star: svg('<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/>'),
     arrow: svg('<path d="M9 6l6 6-6 6"/>'),
     flag: svg('<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>'),
     plane: svg('<path d="M3 13l18-7-7 18-2.5-8.5z"/>'),
     shield: svg('<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/>'),
     laptop: svg('<rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/>'),
     plus: svg('<path d="M12 5v14M5 12h14"/>'),
-    witness: svg('<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/><path d="M15.5 14.8l1 2.2 2.3.3-1.7 1.6.4 2.3-2-1.1"/>'),
   };
 
-  // Flat courtroom figures in the design-system palette.
-  const person = (body, extra = "", hair = "") =>
-    `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 64c0-14 9.5-22 22-22s22 8 22 22z" fill="${body}"/>${extra}<circle cx="32" cy="25" r="12" fill="#EAD7C3"/><circle cx="27.5" cy="25" r="1.4" fill="#2B2F36"/><circle cx="36.5" cy="25" r="1.4" fill="#2B2F36"/><path d="M28.5 30q3.5 2.6 7 0" fill="none" stroke="#2B2F36" stroke-width="1.4" stroke-linecap="round"/>${hair}</svg>`;
-  const FIGURE = {
-    // judge: robe, white collar, grey judicial wig
-    judge: person("#2B2F36", '<path d="M26 42l6 9 6-9z" fill="#FFFFFF"/>', '<path d="M19 24c-1-10 5-15 13-15s14 5 13 15c-2-5-7-8-13-8s-11 3-13 8z" fill="#C6CCD3"/><circle cx="19.5" cy="27" r="3" fill="#C6CCD3"/><circle cx="44.5" cy="27" r="3" fill="#C6CCD3"/>'),
-    // witness: gold jacket, glasses
-    witness: person("#C19F7C", '<path d="M28 42l4 6 4-6z" fill="#F3ECE4"/>', '<path d="M21 20c1-7 6-10 11-10s10 3 11 10c-3-3-7-4-11-4s-8 1-11 4z" fill="#7A5A3A"/><circle cx="27.5" cy="25" r="3.2" fill="none" stroke="#2B2F36" stroke-width="1.2"/><circle cx="36.5" cy="25" r="3.2" fill="none" stroke="#2B2F36" stroke-width="1.2"/><path d="M30.7 25h2.6" stroke="#2B2F36" stroke-width="1.2"/>'),
-    // you: ribbon-blue hoodie
-    defendant: person("#224786", "", '<path d="M20 22c0-8 5-12 12-12s12 4 12 12c-2-2-6-3-12-3s-10 1-12 3z" fill="#62666F"/>'),
-  };
-
+  // Confetti from the Figma "Saved" pop-up (x as % of a 340px card, y in px).
   const CONFETTI = [
-    [8, 22, -20, "#224786"], [20, 6, 15, "#99B4A3"], [34, 30, 40, "#C19F7C"], [62, 10, -35, "#224786"],
-    [76, 28, 25, "#99B4A3"], [88, 8, -10, "#C6CCD3"], [92, 34, 50, "#C19F7C"], [14, 44, 30, "#C6CCD3"],
-    [70, 46, -25, "#224786"], [48, 4, 10, "#C6CCD3"],
+    [11, 30, 20, "#224786"], [24, 76, -30, "#224786"], [79, 28, -15, "#C6CCD3"], [86, 84, 35, "#99B4A3"],
+    [35, 17, -25, "#224786"], [68, 65, -40, "#C6CCD3"], [6, 86, 45, "#99B4A3"], [92, 43, -20, "#C19F7C"],
   ]
     .map(([x, y, r, c]) => `<i style="left:${x}%;top:${y}px;transform:rotate(${r}deg);background:${c}"></i>`)
     .join("");
@@ -857,62 +911,110 @@ input { font: inherit; color: var(--ink); }
 svg { width: 18px; height: 18px; flex: none; }
 
 /* ---- shells ---- */
-.panel-wrap { padding: 16px; }
+img { display: block; flex: none; }
+.panel-wrap { padding: 16px; pointer-events: none; }
+.panel-wrap.has-top { padding-top: 106px; }
+.panel-box { position: relative; width: 340px; max-width: calc(100vw - 32px); pointer-events: auto; animation: in .22s ease-out; }
+/* "Pop-up · banknote": ink outline plus an engraved border */
 .panel {
-  position: relative; width: 360px; max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); overflow: auto;
-  background: var(--bill); border: 1px solid var(--line); border-radius: 18px; padding: 16px;
-  box-shadow: 0 18px 50px rgba(43,47,54,.18), 0 2px 6px rgba(43,47,54,.06);
-  display: flex; flex-direction: column; gap: 12px; animation: in .22s ease-out;
+  position: relative; max-height: calc(100vh - 32px); overflow: auto;
+  background: var(--bill); border: 1px solid var(--ink); border-radius: 18px; padding: 26px 28px 28px;
+  box-shadow: 0 16px 40px rgba(26,31,41,.16);
+  display: flex; flex-direction: column; gap: 14px;
 }
+.has-top .panel { max-height: calc(100vh - 122px); }
+.panel > * { position: relative; }
+.panel > .engraved { position: absolute; inset: -1px; width: calc(100% + 2px); height: calc(100% + 2px); pointer-events: none; }
 .page { position: fixed; inset: 0; background: var(--bill); overflow: auto; animation: fade .2s ease-out; }
 .page.centered { display: grid; place-items: center; padding: 24px 16px; }
 .card-lg {
   position: relative; width: 420px; max-width: 100%; background: var(--white); border: 1px solid var(--line);
-  border-radius: 20px; padding: 28px 24px 22px; display: flex; flex-direction: column; gap: 14px; animation: in .25s ease-out;
+  border-radius: 24px; padding: 32px 32px 28px; display: flex; flex-direction: column; gap: 16px; animation: in .25s ease-out;
+}
+
+/* ---- the judge leaning over the quick check ---- */
+.peek { position: absolute; left: calc(50% - 89px); top: -90px; width: 178px; height: 110px; z-index: 2; pointer-events: none; }
+.peek-head { position: absolute; left: 34px; top: 0; width: 110px; height: 80px; overflow: hidden; }
+.peek-head img { width: 110px; height: auto; }
+.peek.judge-2 .peek-head img { width: 100px; margin-left: 5px; }
+.sleeve { position: absolute; top: 70px; width: 91px; height: 30px; border-radius: 15px; background: var(--robe); box-shadow: 0 3px 6px rgba(42,46,53,.25); }
+.sleeve.l { left: 0; } .sleeve.r { left: 87px; }
+.cuff { position: absolute; top: 70px; width: 8px; height: 30px; background: var(--cuff); border-block: 1px solid var(--robe); }
+.cuff.l { left: 47px; } .cuff.r { left: 123px; }
+.peek-gavel { position: absolute; left: 14px; top: -22px; width: 150px; height: 140px; transform: scale(1.7) rotate(-12deg); transform-origin: 124px 76px; }
+.paw { position: absolute; top: 68px; width: 34px; height: 34px; border-radius: 17px; background: #FDA3A5; border: 1.6px solid #2A2E35; display: flex; gap: 4px; align-items: flex-end; justify-content: center; padding-bottom: 5.6px; }
+.paw.l { left: 55px; } .paw.r { left: 89px; }
+.paw i { width: 1.5px; height: 9px; border-radius: 1px; background: #2A2E35; }
+.paw i:nth-child(2) { height: 10px; }
+.peek { --robe: #2A2E35; --cuff: #FFFFFF; }
+.peek.judge-2 { --robe: #27345A; --cuff: #9B2F3A; }
+.hmph {
+  position: absolute; left: 131px; top: 16px; white-space: nowrap; background: var(--white); border: 1px solid #DCDFE4;
+  border-radius: 12px 12px 12px 4px; padding: 6px 12px; font-size: 13px; font-weight: 700; color: #2A2E35;
+  filter: drop-shadow(0 2px 3px rgba(42,46,53,.12)); animation: in .3s .25s ease-out both;
 }
 
 /* ---- type ---- */
-.h1 { margin: 0; font-size: 30px; line-height: 1.15; font-weight: 700; letter-spacing: -.01em; }
-.h2 { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 700; }
-.kicker { margin: 0 0 -8px; font-size: 13px; font-weight: 600; color: var(--blue); }
-.muted { margin: 0; color: var(--seal); }
+.h1 { margin: 0; font-size: 34px; line-height: 1.2; font-weight: 700; }
+.h2 { margin: 0; font-size: 24px; line-height: 1.18; font-weight: 700; }
+.h3 { margin: 0; font-size: 16px; line-height: 1.4; font-weight: 700; }
+.question { display: flex; flex-direction: column; gap: 4px; }
+.kicker { margin: 0; font-size: 14px; font-weight: 600; color: var(--blue); }
+.muted { margin: 0; color: var(--seal); font-size: 14px; font-weight: 500; line-height: 1.4; }
 .note { margin: 0; font-size: 13px; color: var(--seal); }
-.tiny { font-size: 12px; color: var(--seal); }
+.tiny { font-size: 12px; font-weight: 600; color: var(--seal); }
 .small { font-size: 13px; }
-.fine { margin: 0; font-size: 12px; color: var(--seal); }
-.center { text-align: center; }
-.blue { color: var(--blue); font-weight: 600; }
+.fine { margin: 0; font-size: 13px; color: var(--seal); }
+.center { text-align: center; align-self: center; }
+.blue { color: #1E4384; font-weight: 600; }
 .row-between { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 
 /* ---- cards ---- */
-.card { background: var(--white); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
-.panel-head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 600; color: var(--seal); padding: 2px 2px 0; }
-.icon-btn { border: 0; background: none; padding: 4px; border-radius: 8px; color: var(--seal); display: grid; }
-.icon-btn:hover { background: var(--white); color: var(--ink); }
-.amount { display: flex; align-items: baseline; gap: 6px; margin: 2px 0 8px; }
-.amount b { font-size: 34px; line-height: 1; font-weight: 700; color: var(--blue); letter-spacing: -.02em; }
-.amount span { color: var(--seal); font-size: 13px; }
-.bar { height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; }
-.bar i { display: block; height: 100%; background: var(--blue); border-radius: inherit; transition: width .6s ease-out; }
-.bar-foot { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--seal); }
-.goal-line { display: flex; flex-direction: column; gap: 8px; font-weight: 600; font-size: 13px; }
-.hint { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--gold-deep); }
-.hint svg { width: 20px; height: 20px; padding: 3px; border-radius: 50%; background: var(--gold); color: var(--white); }
-.hint.box { background: var(--gold-tint); border-radius: 12px; padding: 12px 14px; }
-.wish { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--seal); background: var(--bill); }
+.card { background: var(--white); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.panel-head { display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #000; line-height: 1.4; }
+.panel-head .icon-btn { position: absolute; right: -2px; top: -2px; }
+.icon-btn { border: 0; background: none; padding: 2px; border-radius: 8px; display: grid; }
+.icon-btn img { width: 18px; height: 18px; }
+.icon-btn:hover { background: var(--white); }
+.goal { display: flex; flex-direction: column; gap: 8px; }
+.amount { display: flex; align-items: baseline; gap: 6px; }
+.amount b { font-size: 38px; line-height: 1.18; font-weight: 700; color: var(--blue); }
+.amount span { color: var(--seal); font-size: 14px; font-weight: 600; }
+.bar { position: relative; height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; }
+.bar i { position: absolute; left: 0; top: 0; height: 100%; background: var(--blue); border-radius: inherit; transition: width .6s ease-out; }
+.bar i.pre { opacity: .3; }
+.bar-foot { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--seal); }
+.goal-line { display: flex; flex-direction: column; gap: 8px; font-weight: 600; font-size: 15px; }
+.goal-line .bar { height: 8px; border-radius: 4px; }
+.hint { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--gold-deep); }
+.hint-icon { width: 22px; height: 22px; border-radius: 50%; background: var(--gold); display: grid; place-items: center; flex: none; }
+.hint-icon img { width: 12px; height: 12px; }
+.hint.box { background: var(--gold-tint); border-radius: 12px; padding: 12px 14px; gap: 10px; font-size: 14px; }
+.hint.box .hint-icon { width: 28px; height: 28px; }
+.hint.box .hint-icon img { width: 16px; height: 16px; }
+.medallion { width: 68px; height: 80px; align-self: center; }
+.wish { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--seal); background: var(--white); }
 .thumb { width: 34px; height: 34px; border-radius: 8px; background: var(--line); flex: none; }
 .row-link { display: flex; align-items: center; gap: 12px; text-align: left; width: 100%; }
 .row-link span { flex: 1; display: flex; flex-direction: column; }
 .row-link small { color: var(--seal); font-size: 12px; }
 .row-link:hover { border-color: var(--paper); }
 
-/* ---- buttons ---- */
+/* ---- buttons (MM Button: primary / secondary / ghost) ---- */
 .stack { display: flex; flex-direction: column; gap: 8px; }
-.btn { width: 100%; border-radius: 10px; padding: 11px 16px; font-weight: 600; font-size: 15px; border: 1px solid transparent; }
+.btn { position: relative; width: 100%; min-height: 48px; border-radius: 10px; padding: 12px 20px; font-weight: 600; font-size: 16px; line-height: 1.4; border: 1.5px solid transparent; }
 .btn.primary { background: var(--ink); color: var(--white); }
 .btn.primary:hover { background: #3a3f48; }
-.btn.outline { background: var(--white); border-color: var(--paper); }
+.btn.outline { background: transparent; border-color: var(--paper); }
 .btn.outline:hover { border-color: var(--seal); }
+.btn.ghost { background: none; font-size: 15px; font-weight: 500; color: var(--seal); }
+.btn.ghost:hover { color: var(--ink); text-decoration: underline; }
+.sticker {
+  position: absolute; right: -8px; top: -14px; transform: rotate(4deg); display: inline-flex; align-items: center; gap: 4px;
+  background: #C9A27E; border: 2px solid var(--white); border-radius: 12px; padding: 4px 10px; font-size: 12px; font-weight: 800; color: #2A2E35;
+  filter: drop-shadow(0 2px 2px rgba(42,46,53,.15)); pointer-events: none;
+}
+.sticker img { width: 12px; height: 12px; }
 .link { border: 0; background: none; padding: 4px; font-size: 13px; color: var(--seal); align-self: center; }
 .link:hover { color: var(--ink); text-decoration: underline; }
 .chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--paper); background: var(--white); border-radius: 99px; padding: 4px 11px; font-size: 13px; font-weight: 500; }
@@ -920,7 +1022,7 @@ svg { width: 18px; height: 18px; flex: none; }
 .chip.on { background: var(--blue-tint); border-color: var(--blue); color: var(--blue); }
 .chip.gold { background: var(--gold-tint); border-color: transparent; color: var(--gold-deep); padding: 2px 9px; font-size: 12px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.btn:focus-visible, .link:focus-visible, .chip:focus-visible, .chip-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.btn:focus-visible, .link:focus-visible, .chip:focus-visible, .chip-btn:focus-visible, .icon-btn:focus-visible, .transcript-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 /* ---- forms ---- */
 .two { display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; }
@@ -929,122 +1031,155 @@ label input { border: 1px solid var(--paper); border-radius: 10px; padding: 9px 
 label input:focus { border-color: var(--blue); }
 
 /* ---- seals ---- */
-.seal { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; align-self: center; position: relative; }
-.seal svg { width: 26px; height: 26px; }
+.seal { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; align-self: center; position: relative; }
+.seal svg { width: 30px; height: 30px; }
 .seal.blue { background: var(--blue); color: var(--white); }
 .seal.green { background: var(--green); color: var(--green-deep); }
-.seal.soft { background: var(--blue-tint); color: var(--blue); }
-.seal.plain { background: var(--bill); color: var(--ink); border: 1px solid var(--line); }
-.seal.ring::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; border: 1.5px dashed currentColor; opacity: .5; }
+.seal.ring { margin: 5px 0; }
+.seal.ring::after { content: ""; position: absolute; inset: -5.5px; border-radius: 50%; border: 1.5px dashed currentColor; }
 .seal.blue.ring::after { border-color: var(--blue); }
 .seal.green.ring::after { border-color: var(--green-deep); }
-.confetti { position: absolute; inset: 0 0 auto; height: 60px; pointer-events: none; }
-.confetti i { position: absolute; width: 7px; height: 11px; border-radius: 2px; opacity: .85; }
+.confetti { position: absolute; inset: 0 0 auto; height: 110px; pointer-events: none; overflow: hidden; }
+.panel > .confetti { position: absolute; }
+.confetti i { position: absolute; width: 8px; height: 12px; border-radius: 2px; }
 
 /* ---- verdict ---- */
-.reason { border-radius: 12px; padding: 12px 14px; font-size: 14px; }
+.reason { border-radius: 12px; padding: 14px 16px; font-size: 15px; font-weight: 500; line-height: 1.4; }
 .reason.r-blue { background: var(--blue-tint); }
 .reason.r-green { background: var(--green-tint); }
 .reason.r-plain { background: var(--bill); border: 1px solid var(--line); }
 
 /* ---- deliberating ---- */
-.checks { list-style: none; margin: 4px 0 6px; padding: 0; display: flex; flex-direction: column; gap: 12px; }
-.checks li { display: flex; gap: 10px; align-items: flex-start; color: var(--slate); }
-.checks li > span:last-child { display: flex; flex-direction: column; }
+.page.centered .card-lg:has(.rocking) { width: 460px; padding: 36px 32px 32px; gap: 14px; }
+.rocking { width: 92px; height: 92px; border-radius: 50%; background: var(--blue-tint); border: 2.5px dashed var(--blue); display: grid; place-items: center; align-self: center; }
+.rocking img { width: 42px; height: 42px; animation: rock 1.6s ease-in-out infinite; }
+.checks { list-style: none; margin: 0; padding: 8px 0 0; display: flex; flex-direction: column; gap: 12px; }
+.checks li { display: flex; gap: 12px; align-items: flex-start; color: var(--slate); font-size: 15px; line-height: 1.4; }
+.checks li > span:last-child { display: flex; flex-direction: column; gap: 2px; }
 .checks li b { font-weight: 600; }
-.checks li small { font-size: 12px; color: var(--seal); }
-.tick { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--paper); flex: none; margin-top: 1px; position: relative; }
-.checks li.active { color: var(--ink); }
-.checks li.active .tick { border: 1.5px dashed var(--blue); animation: spin 1.6s linear infinite; }
-.checks li.done { color: var(--ink); }
+.checks li small { font-size: 13px; font-weight: 500; color: var(--seal); }
+.tick { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); flex: none; display: grid; place-items: center; }
+.tick img { width: 12px; height: 12px; opacity: 0; }
+.checks li.active, .checks li.done { color: var(--ink); }
+.checks li.active .tick { border: 2px dashed var(--blue); animation: spin 1.6s linear infinite; }
 .checks li.done .tick { background: var(--blue); border-color: var(--blue); }
-.checks li.done .tick::after { content: ""; position: absolute; left: 5px; top: 2px; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.checks li.done .tick img { opacity: 1; }
 
-/* ---- courtroom ---- */
+/* ---- courtroom (E07: battle stage) ---- */
 .court { display: flex; flex-direction: column; }
-.topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; font-size: 14px; color: var(--seal); }
-.chip-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--paper); background: var(--white); border-radius: 10px; padding: 7px 12px; font-weight: 600; font-size: 13px; color: var(--ink); }
-.chip-btn svg { width: 14px; height: 14px; }
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 13px 24px; font-size: 15px; color: var(--seal); }
+.chip-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--paper); background: var(--white); border-radius: 10px; padding: 8px 14px; font-weight: 600; font-size: 14px; color: var(--ink); }
+.chip-btn svg { width: 16px; height: 16px; }
 .chip-btn:hover { border-color: var(--seal); }
-.court-stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 8px 16px 28px; }
-/* courtroom scene above the chat */
-.scene {
-  position: relative; width: 660px; max-width: 100%; height: 150px; flex: none; overflow: hidden;
-  background: linear-gradient(var(--white) 0 74%, var(--line) 74% 75%, var(--bill) 75%);
-  border: 1px solid var(--line); border-radius: 20px;
-  display: grid; grid-template-columns: 1fr 1.3fr 1fr; align-items: end; padding: 0 28px;
+.court-stage { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 8px 16px 28px; }
+.battle { width: 660px; max-width: 100%; background: var(--white); border: 1px solid #DCDFE4; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+.stage {
+  position: relative; height: 340px; flex: none; overflow: hidden; background: #E3E9F4; border: 1px solid #C3CFE5; border-radius: 16px;
+  transition: height .35s ease-out;
 }
-.seal-wall { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--blue-tint); color: var(--blue); }
-.seal-wall svg { width: 16px; height: 16px; }
-.spot { display: flex; flex-direction: column; align-items: center; }
-.spot .figure svg { opacity: .55; transition: opacity .25s; }
-.spot.talking .figure svg { opacity: 1; }
-.figure { position: relative; width: 52px; height: 52px; margin-bottom: -6px; transition: transform .25s ease-out; }
-.figure svg { width: 52px; height: 52px; }
-.spot.judge .figure { width: 60px; height: 60px; }
-.spot.judge .figure svg { width: 60px; height: 60px; }
-.spot.talking .figure { transform: translateY(-5px); }
-.bench, .stand, .table { position: relative; display: grid; place-items: center; border-radius: 8px 8px 0 0; }
-.bench { width: 190px; height: 52px; background: var(--ink); }
-.stand { width: 104px; height: 40px; background: var(--white); border: 1.5px dashed var(--paper); border-bottom: 0; }
-.table { width: 120px; height: 34px; background: var(--paper); }
-.plate { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: var(--white); color: var(--seal); white-space: nowrap; transition: background .2s, color .2s; }
-.bench .plate { background: rgba(255,255,255,.12); color: var(--white); }
-.spot.talking .plate { background: var(--blue); color: var(--white); }
-.spot.witness.talking .plate { background: var(--gold-deep); }
-/* the witness stand is empty until someone is called */
-.spot.witness .figure { opacity: 0; transform: translateY(14px); transition: opacity .35s, transform .35s ease-out; }
-.spot.witness.called .figure { opacity: 1; transform: none; }
-.spot.witness.called.talking .figure { transform: translateY(-5px); }
-.spot.witness.called .stand { background: var(--gold-tint); border: 0; }
-.speech { position: absolute; top: -6px; right: -10px; display: none; gap: 3px; padding: 5px 7px; background: var(--white); border: 1px solid var(--line); border-radius: 10px 10px 10px 2px; }
-.speech i { width: 4px; height: 4px; border-radius: 50%; background: var(--slate); animation: blink 1s infinite; }
-.speech i:nth-child(2) { animation-delay: .15s; }
-.speech i:nth-child(3) { animation-delay: .3s; }
-.spot.thinking .speech { display: flex; }
-.chat {
-  width: 660px; max-width: 100%; height: min(470px, calc(100vh - 290px)); min-height: 300px; display: flex; flex-direction: column;
-  background: var(--white); border: 1px solid var(--line); border-radius: 20px; overflow: hidden;
-}
-.chat-head { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
-.chat-head b { display: block; font-size: 16px; }
-.chat-head small { display: block; font-size: 12px; color: var(--seal); }
-.av { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; flex: none; }
-.av svg { width: 17px; height: 17px; }
-.av.judge { background: var(--blue-tint); color: var(--blue); }
-.av.gold { background: var(--gold-tint); color: var(--gold-deep); }
-.log { flex: 1; overflow-y: auto; padding: 20px 16px 12px; display: flex; flex-direction: column; gap: 10px; }
-.log > :first-child { margin-top: auto; }
-.msg { display: flex; gap: 10px; align-items: flex-end; max-width: 78%; animation: rise .2s ease-out; }
-.msg .bubble { padding: 9px 14px; border-radius: 14px; font-size: 15px; line-height: 1.4; }
-.msg.judge .bubble { background: var(--blue-tint); border-bottom-left-radius: 4px; }
-.msg.judge .bubble.q { font-weight: 700; }
-.msg.me { align-self: flex-end; }
-.msg.me .bubble { background: var(--ink); color: var(--white); border-bottom-right-radius: 4px; }
-.msg.witness .who { font-size: 12px; font-weight: 700; color: var(--gold-deep); margin: 0 0 3px 2px; }
-.msg.witness .who span { font-weight: 500; }
-.msg.witness .bubble { background: var(--gold-tint); border-bottom-left-radius: 4px; }
-.moment { align-self: center; text-align: center; max-width: 80%; font-size: 12px; font-weight: 600; color: var(--seal); padding: 6px 4px; animation: fade .3s ease-out; }
-.typing .bubble { display: flex; gap: 4px; padding: 13px 14px; }
-.typing .bubble i { width: 6px; height: 6px; border-radius: 50%; background: var(--slate); animation: blink 1s infinite; }
-.typing .bubble i:nth-child(2) { animation-delay: .15s; }
-.typing .bubble i:nth-child(3) { animation-delay: .3s; }
-.composer { display: flex; gap: 10px; padding: 12px 14px 14px; border-top: 1px solid var(--line); }
-.composer input { flex: 1; border: 1.5px solid var(--paper); border-radius: 12px; padding: 11px 14px; font-size: 15px; outline: none; background: var(--white); }
+.stage.short { height: 260px; }
+.stage > * { position: absolute; }
+.pillar { top: -1px; width: 26px; height: 210px; background: #F3F6FB; border-inline: 1px solid #C3CFE5; }
+.floor { left: -1px; right: -1px; top: 199px; bottom: 0; background: #F3F4F6; border-top: 2px solid #C3CFE5; }
+.bench-shadow { right: 51px; top: 167px; width: 210px; height: 44px; }
+.judge-seat { right: 81px; top: 47px; width: 150px; height: 140px; }
+.judge-seat .bench { position: absolute; inset: 0; width: 150px; height: 140px; }
+.judge-seat .bench.gavel { transform: scale(1.6); transform-origin: 124px 88px; }
+.judge-seat .judge-art { position: absolute; transform-origin: 50% 100%; transition: transform .25s ease-out; }
+.judge-seat.judge-1 .judge-art { left: 15px; top: 2px; width: 120px; }
+.judge-seat.judge-2 .judge-art { left: 23px; top: 0; width: 104px; }
+.stage.thinking .judge-art { animation: ponder 1.2s ease-in-out infinite; }
+.you-shadow { left: 9px; bottom: -39px; width: 280px; height: 80px; }
+.you-art { left: 58px; bottom: -10px; height: 210px; width: auto; transition: bottom .35s ease-out; }
+.stage.short .you-art { height: 180px; }
+.stage.hit .you-art { animation: nudge .45s ease-out; }
+.tag { background: var(--white); border: 2px solid #2A2E35; border-radius: 12px; padding: 8px 12px; filter: drop-shadow(3px 3px 0 #2A2E35); display: flex; flex-direction: column; gap: 6px; }
+.tag-title { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.tag-title b { font-size: 15px; font-weight: 900; color: #2A2E35; }
+.tag-title span { font-size: 11px; font-weight: 700; color: #5B6270; }
+.judge-tag { left: 13px; top: 13px; width: 210px; }
+.you-tag { right: 13px; bottom: 17px; width: 220px; }
+.patience { display: flex; flex-direction: column; gap: 4px; }
+.patience small { font-size: 11px; font-weight: 800; letter-spacing: .06em; color: #5B6270; }
+.pbar { position: relative; height: 8px; border-radius: 4px; background: #DCDFE4; overflow: hidden; }
+.pbar i { position: absolute; inset: 0 auto 0 0; background: #C9A27E; transition: width .6s ease-out; }
+.impact { left: 235px; top: 145px; display: flex; gap: 6px; transform: rotate(-8deg); opacity: 0; }
+.impact i { width: 6px; height: 18px; border-radius: 3px; background: #1E4384; }
+.impact i:nth-child(2) { height: 26px; }
+.stage.hit .impact { animation: pop 1.1s ease-out; }
+.stage.short .impact { top: 105px; }
+.hmm { right: 69px; top: 25px; padding: 4px 10px; border-radius: 12px; background: #2A2E35; color: var(--white); font-size: 13px; font-weight: 900; transform: rotate(4deg) scale(.6); opacity: 0; transition: opacity .2s, transform .2s; }
+.stage.thinking .hmm { opacity: 1; transform: rotate(4deg); }
+.status-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; }
+.verdict-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 12px; font-size: 13px; font-weight: 800; line-height: 1.25; animation: fade .3s ease-out; }
+.verdict-chip img { width: 14px; height: 14px; }
+.verdict-chip.good { background: #EAF1EB; color: #3F6B45; }
+.verdict-chip.meh { background: var(--bill); color: var(--seal); }
+.verdict-chip.bad { background: var(--gold-tint); color: var(--gold-deep); }
+.verdict-chip.info { background: var(--blue-tint); color: #1E4384; }
+.transcript-btn { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px; border-radius: 20px; background: var(--white); border: 1px solid #DCDFE4; font-size: 13px; font-weight: 700; color: #2A2E35; white-space: nowrap; }
+.transcript-btn img { width: 14px; height: 14px; }
+.transcript-btn:hover { border-color: var(--paper); }
+.transcript { max-height: 180px; overflow-y: auto; border: 1px solid #DCDFE4; border-radius: 14px; padding: 10px 14px; background: var(--bill); display: flex; flex-direction: column; gap: 6px; }
+.transcript[hidden] { display: none; }
+.line { margin: 0; font-size: 13px; line-height: 1.4; color: #3E4450; }
+.line b { color: #2A2E35; }
+.line.court { color: var(--seal); font-style: italic; }
+.witness-card { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; border: 2px solid #2A2E35; border-radius: 14px; background: #F4ECE3; filter: drop-shadow(3px 3px 0 #2A2E35); animation: in .3s ease-out; }
+.witness-card[hidden] { display: none; }
+.witness-card.future { background: var(--white); }
+.w-icon { width: 36px; height: 36px; border-radius: 18px; background: var(--white); border: 1.5px solid #2A2E35; display: grid; place-items: center; flex: none; }
+.w-icon img { width: 18px; height: 18px; }
+.testimony { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.testimony small { font-size: 12px; font-weight: 900; letter-spacing: .1em; color: #6B4A2B; }
+.witness-card.future .testimony small { color: #1E4384; }
+.testimony b { font-size: 16px; font-weight: 700; color: #2A2E35; }
+.testimony p { margin: 0; font-size: 14px; font-weight: 500; line-height: 1.4; color: #3E4450; }
+.prompt { position: relative; background: var(--white); border: 2px solid #2A2E35; border-radius: 14px; padding: 12px 16px 18px; filter: drop-shadow(0 4px 0 #2A2E35); display: flex; flex-direction: column; gap: 4px; }
+.prompt small { font-size: 12px; font-weight: 900; letter-spacing: .1em; color: #1E4384; }
+.prompt p { margin: 0; min-height: 23px; font-size: 18px; font-weight: 700; line-height: 1.3; color: #2A2E35; }
+.prompt .next { position: absolute; right: 14px; bottom: 9px; width: 12px; height: 10px; animation: blink 1.2s infinite; }
+.dots { display: inline-flex; gap: 4px; padding: 8px 0; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--slate); animation: blink 1s infinite; }
+.dots i:nth-child(2) { animation-delay: .15s; }
+.dots i:nth-child(3) { animation-delay: .3s; }
+.composer { display: flex; gap: 10px; padding-top: 6px; }
+.composer input { flex: 1; min-width: 0; height: 54px; border: 2px solid #2A2E35; border-radius: 14px; padding: 0 16px; font-size: 16px; font-weight: 500; outline: none; background: var(--white); }
+.composer input::placeholder { color: #8A909C; }
 .composer input:focus { border-color: var(--blue); }
 .composer input:disabled { background: var(--bill); }
-.send { width: 44px; border: 0; border-radius: 12px; background: var(--ink); color: var(--white); display: grid; place-items: center; }
+.send { width: 54px; height: 54px; flex: none; border: 0; border-radius: 14px; background: #2A2E35; display: grid; place-items: center; }
+.send img { width: 20px; height: 20px; }
 .send:disabled { opacity: .35; cursor: default; }
 
 @keyframes in { from { opacity: 0; transform: translateY(6px); } }
-@keyframes rise { from { opacity: 0; transform: translateY(4px); } }
 @keyframes fade { from { opacity: 0; } }
 @keyframes blink { 50% { opacity: .3; } }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes rock { 0%, 100% { transform: rotate(-10deg); } 50% { transform: rotate(10deg); } }
+@keyframes ponder { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-3deg); } 70% { transform: rotate(3deg); } }
+@keyframes nudge { 30% { transform: translateX(10px); } }
+@keyframes pop { 0% { opacity: 0; transform: rotate(-8deg) scale(.4); } 20% { opacity: 1; transform: rotate(-8deg) scale(1.1); } 70% { opacity: 1; } 100% { opacity: 0; transform: rotate(-8deg); } }
 @media (prefers-reduced-motion: reduce) { *, *::after { animation: none !important; transition: none !important; } }
-@media (max-width: 520px) { .scene { padding: 0 8px; height: 130px; } .bench { width: 120px; } .stand, .table { width: 84px; } }
-@media (max-height: 620px) { .scene { display: none; } }
-@media (max-width: 520px) { .msg { max-width: 90%; } .h1 { font-size: 26px; } }
+@media (max-width: 600px) {
+  .battle { padding: 14px; gap: 12px; }
+  .stage { height: 280px; }
+  .stage.short { height: 220px; }
+  .judge-seat { right: 8px; top: 60px; transform: scale(.8); transform-origin: 100% 0; }
+  .bench-shadow { right: -20px; top: 165px; }
+  .you-art, .stage.short .you-art { left: 6px; height: 140px; }
+  .you-shadow { left: -60px; }
+  .impact { left: 150px; }
+  .stage.short .impact { top: 90px; }
+  .judge-tag { width: 170px; }
+  .you-tag { width: auto; left: auto; right: 8px; bottom: 8px; padding: 5px 10px; }
+  .judge-seat { top: 40px; }
+  .hmm { right: 20px; }
+  .prompt p { font-size: 16px; }
+  .h1 { font-size: 28px; }
+  .card-lg { padding: 24px 20px 20px; }
+}
+@media (max-height: 760px) { .stage { height: 240px; } .stage.short { height: 200px; } .stage .impact { top: 100px; } }
 `;
   }
 })();

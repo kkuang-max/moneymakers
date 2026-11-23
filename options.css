@@ -15,6 +15,12 @@ form { display: flex; flex-direction: column; gap: 14px; }
 .dev:not([open]) > :not(summary) { display: none; }
 .mode-fields { display: flex; flex-direction: column; gap: 12px; }
 .mode-fields[hidden] { display: none; }
+.defendants { display: flex; gap: 12px; flex-wrap: wrap; }
+.defendant { position: relative; flex-direction: column; align-items: center; gap: 8px; width: 132px; padding: 12px 10px 10px; border: 1.5px solid var(--line); border-radius: 12px; cursor: pointer; color: var(--ink); font-size: 13px; }
+.defendant input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.defendant img { width: 84px; height: 98px; object-fit: contain; }
+.defendant:has(input:checked) { border-color: var(--blue); background: var(--blue-tint); color: var(--blue); }
+.defendant:has(input:focus-visible) { outline: 2px solid var(--blue); outline-offset: 2px; }
 code { font-size: 12px; background: var(--bill); padding: 1px 5px; border-radius: 5px; }
 @media (max-width: 560px) {
   .grid3 { grid-template-columns: 1fr 1fr; }
