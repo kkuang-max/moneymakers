@@ -1,8 +1,7 @@
-// Settings page. Every change saves right away.
+// Settings page (Figma "Settings" window). Every change saves right away.
 const form = document.getElementById("form");
 const status = document.getElementById("status");
-const DEFAULT_SKIPS = ["groceries", "textbooks", "medicine"];
-let skips = DEFAULT_SKIPS;
+const skipState = { skips: [...DEFAULT_SKIPS], custom: [] };
 
 function flash(msg) {
   status.textContent = msg;
@@ -15,14 +14,18 @@ function showMode() {
   for (const el of document.querySelectorAll(".mode-fields")) el.hidden = el.dataset.mode !== mode;
 }
 
-function syncChips() {
-  for (const chip of document.querySelectorAll("[data-skip]")) chip.classList.toggle("on", skips.includes(chip.dataset.skip));
+// E17 (no goal yet): "Quick start" suggestions and a "Save goal" button.
+// E18 (goal set): "Update goal" plus "Remove goal, just save".
+function syncGoalMode(hasGoal) {
+  document.getElementById("quickStart").hidden = hasGoal;
+  document.getElementById("updateGoal").textContent = hasGoal ? "Update goal" : "Save goal";
+  document.getElementById("removeGoal").hidden = !hasGoal;
 }
 
 async function save(msg = "Saved") {
   const { settings = {} } = await chrome.storage.local.get("settings");
   const data = Object.fromEntries(new FormData(form));
-  await chrome.storage.local.set({ settings: { ...settings, ...data, skipCategories: skips } });
+  await chrome.storage.local.set({ settings: { ...settings, ...data, skipCategories: skipState.skips, skipCustom: skipState.custom.join(", ") } });
   flash(msg);
 }
 
@@ -33,14 +36,20 @@ chrome.storage.local.get({ settings: {} }).then(({ settings }) => {
     if (el.type === "radio") el.checked = el.value === settings[el.name];
     else el.value = settings[el.name];
   }
-  skips = settings.skipCategories || DEFAULT_SKIPS;
+  skipState.skips = settings.skipCategories || [...DEFAULT_SKIPS];
+  skipState.custom = splitCustom(settings.skipCustom);
   if (settings.mode && settings.mode !== "scripted") document.getElementById("dev").open = true;
   showMode();
-  syncChips();
+  syncGoalMode(!!(settings.goalName && Number(settings.goalAmount)));
+  renderSuggestions(document.getElementById("suggest"), { name: form.elements.goalName, amount: form.elements.goalAmount });
+  renderSkipEditor(document.getElementById("skips"), skipState, () => save());
 });
 
+// Goal fields save with their buttons; everything else saves as you go.
+const GOAL_FIELDS = ["goalName", "goalAmount", "goalDate"];
 let timer;
-form.addEventListener("input", () => {
+form.addEventListener("input", (e) => {
+  if (GOAL_FIELDS.includes(e.target.name) || !e.target.name) return;
   clearTimeout(timer);
   timer = setTimeout(save, 500);
 });
@@ -49,20 +58,22 @@ form.elements.mode.addEventListener("change", () => {
   save();
 });
 
-document.getElementById("chips").addEventListener("click", (e) => {
-  const chip = e.target.closest("[data-skip]");
-  if (!chip) return;
-  const k = chip.dataset.skip;
-  skips = skips.includes(k) ? skips.filter((s) => s !== k) : [...skips, k];
-  syncChips();
-  save();
-});
-
-document.getElementById("updateGoal").onclick = () => save("Goal updated");
-document.getElementById("removeGoal").onclick = () => {
-  for (const n of ["goalName", "goalAmount", "goalDate"]) form.elements[n].value = "";
-  save("Goal removed. Skips still add up.");
+document.getElementById("updateGoal").onclick = async () => {
+  const hasGoal = !!(form.elements.goalName.value.trim() && Number(form.elements.goalAmount.value));
+  if (form.elements.goalName.value.trim() && !hasGoal) return form.elements.goalAmount.focus();
+  await save(hasGoal ? "Goal saved" : "Saved");
+  syncGoalMode(hasGoal);
 };
+document.getElementById("removeGoal").onclick = async () => {
+  for (const n of ["goalName", "goalAmount", "goalDate"]) form.elements[n].value = "";
+  await save("Goal removed. Skips still add up.");
+  syncGoalMode(false);
+  form.elements.goalName.dispatchEvent(new Event("input"));
+};
+
+const closeTab = () => chrome.tabs.getCurrent((t) => (t ? chrome.tabs.remove(t.id) : window.close()));
+document.getElementById("close").onclick = closeTab;
+document.getElementById("back").onclick = () => (history.length > 1 ? history.back() : closeTab());
 
 document.getElementById("reset").onclick = async () => {
   await chrome.storage.local.set({ history: [], recess: {}, wishlist: [], neverItems: [] });

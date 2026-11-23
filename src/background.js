@@ -202,5 +202,5 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   // Older builds called OpenRouter mode "live".
   const { settings } = await chrome.storage.local.get("settings");
   if (settings?.mode === "live") await chrome.storage.local.set({ settings: { ...settings, mode: "openrouter" } });
-  if (reason === "install") chrome.runtime.openOptionsPage();
+  if (reason === "install") chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html") });
 });
