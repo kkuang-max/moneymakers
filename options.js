@@ -29,7 +29,9 @@ async function save(msg = "Saved") {
 chrome.storage.local.get({ settings: {} }).then(({ settings }) => {
   if (settings.mode === "live") settings.mode = "openrouter"; // older builds
   for (const el of form.elements) {
-    if (el.name && settings[el.name] != null) el.value = settings[el.name];
+    if (!el.name || settings[el.name] == null) continue;
+    if (el.type === "radio") el.checked = el.value === settings[el.name];
+    else el.value = settings[el.name];
   }
   skips = settings.skipCategories || DEFAULT_SKIPS;
   if (settings.mode && settings.mode !== "scripted") document.getElementById("dev").open = true;
