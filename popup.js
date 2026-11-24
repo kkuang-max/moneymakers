@@ -49,18 +49,29 @@ async function render() {
     const [icon, cls, tag, tagCls] =
       isSave(h) ? ["case-saved.svg", "", `Saved ${money(h.total)}`, "blue"]
       : h.outcome === "approved" ? ["case-approved.svg", "green", "Case approved", "green"]
-      : h.outcome === "never" ? ["close-18.svg", "plain", "Won't ask again", ""]
-      : h.outcome === "not now" ? ["close-18.svg", "plain", "Not now", ""]
-      : h.outcome === "left" ? ["close-18.svg", "plain", "Left trial", ""]
+      : h.outcome === "never" ? ["clock.svg", "plain", "Won't ask again", ""]
+      : h.outcome === "not now" ? ["clock.svg", "plain", "Not now", ""]
+      : h.outcome === "left" ? ["clock.svg", "plain", "Left trial", ""]
       : ["case-approved.svg", "plain", "Bought", ""];
     const li = document.createElement("li");
     const when = new Date(h.date).toDateString() === new Date().toDateString() ? "Today" : new Date(h.date).toLocaleDateString([], { month: "short", day: "numeric" });
     const where = h.where === "courtroom" ? "Courtroom" : isSave(h) ? "Skipped at checkout" : "Checkout";
-    li.innerHTML = `<span class="ic ${cls}"><img src="assets/ui/${icon}" alt="" /></span><span class="t"><b></b><span>${when} · ${where}</span></span><span class="tag ${tagCls}">${tag}</span>`;
+    li.innerHTML = `<span class="ic ${cls}"><img src="assets/ui/${icon}" alt="" /></span><span class="t"><b></b><span>${when} · ${where}</span></span><span class="tag ${tagCls}">${tag}</span><button class="remove" aria-label="Remove from history" title="Remove from history"><img src="assets/ui/close-18.svg" alt="" /></button>`;
     li.querySelector("b").textContent = h.title;
     li.title = "Show transcript";
     li.tabIndex = 0;
     li.onclick = li.onkeydown = (e) => (e.type === "click" || e.key === "Enter") && showTranscript(h);
+    // The x removes this case from the history (and from the savings it added up to).
+    li.querySelector(".remove").onclick = async (e) => {
+      e.stopPropagation();
+      const { history: all } = await chrome.storage.local.get({ history: [] });
+      const i = all.findIndex((x) => x.date === h.date && x.title === h.title);
+      if (i >= 0) all.splice(i, 1);
+      await chrome.storage.local.set({ history: all });
+      $("tx").hidden = true;
+      render();
+    };
+    li.querySelector(".remove").onkeydown = (e) => e.stopPropagation();
     list.appendChild(li);
   }
 }
