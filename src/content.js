@@ -671,7 +671,34 @@
       }
       return () => stage.classList.remove("thinking");
     }
-    const readPause = (t) => wait(Math.min(1400, 350 + t.length * 12));
+    // Hold each line long enough to read (about 3 words a second, at least 2.5s).
+    // Clicking the line, or pressing Enter, moves on sooner.
+    const promptBox = $(".prompt");
+    function readPause(t) {
+      const words = String(t || "").split(/\s+/).filter(Boolean).length;
+      const ms = Math.min(9000, Math.max(2500, 1500 + words * 330));
+      promptBox.classList.add("reading");
+      return new Promise((resolve) => {
+        const done = () => {
+          clearTimeout(timer);
+          promptBox.removeEventListener("click", done);
+          witnessEl.removeEventListener("click", done);
+          layer.removeEventListener("keydown", onKey, true);
+          promptBox.classList.remove("reading");
+          resolve();
+        };
+        const onKey = (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            done();
+          }
+        };
+        const timer = setTimeout(done, ms);
+        promptBox.addEventListener("click", done);
+        witnessEl.addEventListener("click", done);
+        layer.addEventListener("keydown", onKey, true);
+      });
+    }
     const fallbackNote = (err) => {
       if (warned) return;
       warned = true;
@@ -718,7 +745,7 @@
       const step = flow.next(state);
       if (step.action === "rule") {
         moment(step.moment);
-        await wait(1200);
+        await readPause(step.moment);
         if (state.left) return;
         return deliberate(item, settings, history, profile, state, transcript, ctx);
       }
@@ -726,7 +753,7 @@
         moment(step.moment);
         state.witnessCalled = true;
         state.witness = flow.pickWitness(state);
-        await wait(600);
+        await readPause(step.moment);
         const w = await ask("witness", { witness: state.witness }, "witness");
         say("witness", w.says);
         await readPause(w.says);
@@ -738,6 +765,7 @@
       }
       if (step.action === "recess") {
         moment(step.moment);
+        await readPause(step.moment);
         state.totalRounds += 1;
       }
       state.round += 1;
@@ -770,7 +798,7 @@
     const items = [...layer.querySelectorAll(".checks li")];
     for (const li of items) {
       li.classList.add("active");
-      await wait(1500);
+      await wait(1900);
       li.classList.replace("active", "done");
       await wait(250);
     }
@@ -1061,7 +1089,7 @@ label input:focus { border-color: var(--blue); }
 /* ---- deliberating ---- */
 .page.centered .card-lg:has(.piggy) { width: 460px; padding: 32px 32px 32px; gap: 14px; }
 /* the piggy-bank animation sits on its own cream background */
-.piggy { width: 168px; height: 168px; align-self: center; border-radius: 24px; background: #FFF9EF; margin-bottom: 2px; }
+.piggy { width: 200px; height: 200px; align-self: center; border-radius: 24px; background: #FFF9EF; margin-bottom: 2px; }
 .checks { list-style: none; margin: 0; padding: 8px 0 0; display: flex; flex-direction: column; gap: 12px; }
 .checks li { display: flex; gap: 12px; align-items: flex-start; color: var(--slate); font-size: 15px; line-height: 1.4; }
 .checks li > span:last-child { display: flex; flex-direction: column; gap: 2px; }
@@ -1147,7 +1175,10 @@ label input:focus { border-color: var(--blue); }
 .prompt { position: relative; background: var(--white); border: 2px solid #2A2E35; border-radius: 14px; padding: 12px 16px 18px; filter: drop-shadow(0 4px 0 #2A2E35); display: flex; flex-direction: column; gap: 4px; }
 .prompt small { font-size: 12px; font-weight: 900; letter-spacing: .1em; color: #1E4384; }
 .prompt p { margin: 0; min-height: 23px; font-size: 18px; font-weight: 700; line-height: 1.3; color: #2A2E35; }
-.prompt .next { position: absolute; right: 14px; bottom: 9px; width: 12px; height: 10px; animation: blink 1.2s infinite; }
+.prompt .next { position: absolute; right: 14px; bottom: 9px; width: 12px; height: 10px; opacity: 0; transition: opacity .2s; }
+.prompt.reading { cursor: pointer; }
+.prompt.reading .next { opacity: 1; animation: blink 1.2s infinite; }
+.witness-card { cursor: default; }
 .dots { display: inline-flex; gap: 4px; padding: 8px 0; }
 .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--slate); animation: blink 1s infinite; }
 .dots i:nth-child(2) { animation-delay: .15s; }
