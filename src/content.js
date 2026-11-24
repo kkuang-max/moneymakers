@@ -59,7 +59,7 @@
       "toothpaste", "toothbrush", "floss", "mouthwash", "deodorant", "antiperspirant", "shampoo", "conditioner", "soap",
       "body wash", "hand wash", "face wash", "cleanser", "lotion", "moisturizer", "lip balm", "tampon", "menstrual pad", "maxi pad", "menstrual",
       "razor", "razor blade", "shaving cream", "toilet paper", "paper towel", "tissue", "wipes", "diaper", "cotton swab", "q-tips",
-      "hand sanitizer", "sanitizer", "laundry detergent", "detergent", "dish soap", "dishwasher pod", "trash bag", "personal care",
+      "hand sanitizer", "laundry detergent", "detergent", "dish soap", "dishwasher pod", "trash bag", "personal care",
       "oral care", "household supplies", "paper & plastic", "bath & bathing accessories", "shave & hair removal", "feminine care",
     ],
     transit: [
@@ -67,6 +67,33 @@
       "compass card", "oyster card", "upass", "u-pass", "transit pass", "parking",
     ],
   };
+  // Amazon departments (from the product page breadcrumb) for each skip category.
+  // When an item's category is known, only these decide.
+  const CATEGORY_WORDS = {
+    groceries: ["grocery & gourmet food", "grocery", "pantry staples", "snacks & sweets", "beverages", "fresh produce", "baby food"],
+    textbooks: ["textbooks", "new, used & rental textbooks", "test preparation", "education & teaching"],
+    medicine: [
+      "health care", "medications", "medication", "vitamins, minerals & supplements", "vitamins", "supplements", "pain relievers",
+      "allergy, sinus & asthma", "cold & flu", "digestive health", "first aid", "sleep & snoring", "contact lenses", "eye care",
+      "thermometers", "over-the-counter",
+    ],
+    bills: ["subscription", "prime membership", "amazon prime", "memberships", "phone plans", "insurance"],
+    gifts: ["gift cards", "gift card", "gift wrapping supplies", "greeting cards", "gift baskets"],
+    toiletries: [
+      "household supplies", "paper & plastic", "toilet paper", "paper towels", "laundry", "dishwashing", "oral care",
+      "personal care", "bath & bathing accessories", "shave & hair removal", "feminine care", "deodorants & antiperspirants",
+      "body wash", "hand soaps", "diapering", "wipes & refills",
+    ],
+    transit: ["transit", "bus pass", "transportation"],
+  };
+  // "Snack Bowl", "Coffee Maker", "Toothbrush Holder" etc. describe the product, not what it is.
+  const ACCESSORY_NOUNS = [
+    "bowl", "holder", "stand", "maker", "cooker", "kettle", "frother", "grinder", "dispenser", "organizer", "organiser",
+    "container", "jar", "canister", "storage", "rack", "tray", "mug", "cup", "clip", "scoop", "scale", "press", "machine",
+    "brewer", "pot", "warmer", "case", "bin", "caddy", "station", "shelf", "basket", "pouch", "bag", "bottle", "box",
+    "cabinet", "set", "kit", "accessories", "decor", "sign", "print", "poster", "costume", "shirt", "t-shirt", "pillow",
+    "lamp", "plush", "toy", "game", "maker's", "spoon", "fork", "knife", "plate", "sleeve", "cover", "mat", "towel",
+  ];
   const DEFAULT_SKIPS = ["groceries", "textbooks", "medicine"];
 
   let pendingButton = null; // the buy button we intercepted
@@ -336,10 +363,15 @@
     const store = custom.find((s) => location.hostname.toLowerCase().includes(s.replace(/\s+/g, "")));
     if (store) return { item: null, skipped: item.items.map((i) => ({ title: i.title, why: `"${store}" is on your skip list` })) };
     const cats = settings.skipCategories || DEFAULT_SKIPS;
-    const words = [...cats.flatMap((c) => (SKIP_WORDS[c] || []).map((w) => [w, c])), ...custom.map((w) => [w, w])];
-    // Whole words only, so "iPads" isn't "pads" and "Price" isn't "rice".
+    // Whole words only, so "iPads" isn't "pads" and "Price" isn't "rice". A word that just
+    // describes what a product is for ("Snack Bowl", "Coffee Maker", "Toothbrush Holder")
+    // doesn't count: those are home goods, not groceries or toiletries.
     const escRe = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const matchers = words.map(([w, c]) => [new RegExp(`(^|[^a-z0-9])${escRe(w)}(s|es)?($|[^a-z0-9])`, "i"), w, c]);
+    const notFor = `(?![\\s-]+(?:${ACCESSORY_NOUNS.join("|")})s?(?:$|[^a-z0-9]))`;
+    const re = (w, guard) => new RegExp(`(^|[^a-z0-9])${escRe(w)}(s|es)?${guard ? notFor : ""}($|[^a-z0-9])`, "i");
+    const titleMatchers = cats.flatMap((c) => (SKIP_WORDS[c] || []).map((w) => [re(w, true), w, c]));
+    const categoryMatchers = cats.flatMap((c) => (CATEGORY_WORDS[c] || []).map((w) => [re(w, false), w, c]));
+    const customMatchers = custom.map((w) => [re(w, false), w, w]);
     const kept = [];
     const skipped = [];
     for (const i of item.items) {
@@ -347,10 +379,15 @@
         skipped.push({ title: i.title, why: "you asked never to be asked about it" });
         continue;
       }
-      const text = `${i.title} ${i.category || ""}`;
-      const hit = matchers.find(([re]) => re.test(text));
-      if (hit) skipped.push({ title: i.title, why: `${hit[2] === hit[1] ? `"${hit[1]}"` : hit[2]} is on your skip list (matched "${hit[1]}")` });
-      else kept.push(i);
+      // When we know Amazon's category for the item, it decides. The name's words are
+      // only the fallback for items whose category we couldn't read.
+      const hit =
+        customMatchers.find(([r]) => r.test(`${i.title} ${i.category || ""}`)) ||
+        (i.category ? categoryMatchers.find(([r]) => r.test(i.category)) : titleMatchers.find(([r]) => r.test(i.title)));
+      if (hit) {
+        const from = hit[2] === hit[1] ? "" : i.category ? ` (Amazon category: ${i.category})` : ` (name contains "${hit[1]}")`;
+        skipped.push({ title: i.title, why: `${hit[2] === hit[1] ? `"${hit[1]}"` : hit[2]} is on your skip list${from}` });
+      } else kept.push(i);
     }
     if (!kept.length) return { item: null, skipped };
     if (!skipped.length) return { item, skipped };
