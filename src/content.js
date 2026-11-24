@@ -766,7 +766,7 @@
             ${img("ui/next.svg", "next")}
           </div>
           <form class="composer" id="composer">
-            <input id="answer" autocomplete="off" placeholder="Type your answer to the judge…" aria-label="Your answer to the judge" />
+            <textarea id="answer" rows="1" autocomplete="off" placeholder="Type your answer to the judge…" aria-label="Your answer to the judge"></textarea>
             <button class="send" aria-label="Send" disabled>${img("ui/arrow.svg")}</button>
           </form>
         </div>
@@ -928,7 +928,20 @@
     say("judge", open.question);
     openInput();
 
-    input.addEventListener("keydown", (e) => e.stopPropagation()); // keep the store's shortcuts out of it
+    // The answer box grows with what you type (up to about 6 lines, then it scrolls).
+    // Enter sends, Shift+Enter adds a new line.
+    const grow = () => {
+      input.style.height = "auto";
+      input.style.height = `${Math.min(input.scrollHeight + 4, 168)}px`;
+    };
+    input.addEventListener("input", grow);
+    input.addEventListener("keydown", (e) => {
+      e.stopPropagation(); // keep the store's shortcuts out of it
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing && !e.defaultPrevented) {
+        e.preventDefault();
+        $("#composer").requestSubmit();
+      }
+    });
     $("#composer").onsubmit = async (e) => {
       e.preventDefault();
       const answer = input.value.trim();
@@ -936,6 +949,7 @@
       yourTurn = false;
       send.disabled = true;
       input.value = "";
+      grow();
       say("defendant", answer);
 
       const r = await ask("answer", { answer, next_round: state.round + 1 });
@@ -1431,11 +1445,14 @@ label input:focus { border-color: var(--blue); }
 .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--slate); animation: blink 1s infinite; }
 .dots i:nth-child(2) { animation-delay: .15s; }
 .dots i:nth-child(3) { animation-delay: .3s; }
-.composer { display: flex; gap: 10px; padding-top: 6px; }
-.composer input { flex: 1; min-width: 0; height: 54px; border: 2px solid #2A2E35; border-radius: 14px; padding: 0 16px; font-size: 16px; font-weight: 500; outline: none; background: var(--white); }
-.composer input::placeholder { color: #8A909C; }
-.composer input:focus { border-color: var(--blue); }
-.composer input:disabled { background: var(--bill); }
+.composer { display: flex; align-items: flex-end; gap: 10px; padding-top: 6px; }
+.composer textarea {
+  flex: 1; min-width: 0; height: 54px; min-height: 54px; max-height: 168px; resize: none; overflow-y: auto;
+  border: 2px solid #2A2E35; border-radius: 14px; padding: 14px 16px; font: inherit; font-size: 16px; font-weight: 500; line-height: 1.4;
+  color: var(--ink); outline: none; background: var(--white); transition: height .1s ease-out;
+}
+.composer textarea::placeholder { color: #8A909C; }
+.composer textarea:focus { border-color: var(--blue); }
 .send { width: 54px; height: 54px; flex: none; border: 0; border-radius: 14px; background: #2A2E35; display: grid; place-items: center; }
 .send img { width: 20px; height: 20px; }
 .send:disabled { opacity: .35; cursor: default; }
