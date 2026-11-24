@@ -800,7 +800,6 @@
           <div class="prompt" aria-live="polite">
             <small>THE JUDGE</small>
             <p id="prompt"></p>
-            ${img("ui/next.svg", "next")}
           </div>
           <form class="composer" id="composer">
             <textarea id="answer" rows="1" autocomplete="off" placeholder="Type your answer to the judge…" aria-label="Your answer to the judge"></textarea>
@@ -899,43 +898,12 @@
       }
       return () => stage.classList.remove("thinking");
     }
-    // Hold each line long enough to read (about 3 words a second, at least 2.5s).
-    // Clicking the line, or pressing Enter, moves on sooner.
-    const promptBox = $(".prompt");
-    function readPause(t) {
+    // Each line stays up long enough to read: about 3 words a second, 2.5s to 9s.
+    // You can type in the meantime; sending waits until the judge has asked the question.
+    const readPause = (t) => {
       const words = String(t || "").split(/\s+/).filter(Boolean).length;
-      const ms = Math.min(9000, Math.max(2500, 1500 + words * 330));
-      promptBox.classList.add("reading");
-      return new Promise((resolve) => {
-        const done = () => {
-          clearTimeout(timer);
-          promptBox.removeEventListener("click", done);
-          witnessEl.removeEventListener("click", done);
-          layer.removeEventListener("keydown", onKey, true);
-          promptBox.classList.remove("reading");
-          resolve();
-        };
-        const onKey = (e) => {
-          // In the answer box, typing (spaces included) just types. Enter there skips
-          // the wait but doesn't send: what you wrote stays, and the next Enter sends it.
-          if (e.target === input) {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              done();
-            }
-            return;
-          }
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            done();
-          }
-        };
-        const timer = setTimeout(done, ms);
-        promptBox.addEventListener("click", done);
-        witnessEl.addEventListener("click", done);
-        layer.addEventListener("keydown", onKey, true);
-      });
-    }
+      return wait(Math.min(9000, Math.max(2500, 1500 + words * 330)));
+    };
     const fallbackNote = (err) => {
       if (warned) return;
       warned = true;
@@ -958,12 +926,6 @@
       send.disabled = false;
       input.focus();
     }
-
-    // Opening
-    say("judge", open.opening);
-    await readPause(open.opening);
-    say("judge", open.question);
-    openInput();
 
     // The answer box grows with what you type (up to about 6 lines, then it scrolls).
     // Enter sends, Shift+Enter adds a new line.
@@ -1029,6 +991,12 @@
       say("judge", r.question);
       openInput();
     };
+
+    // Opening (the answer box is already live, so you can start typing while it's read out)
+    say("judge", open.opening);
+    await readPause(open.opening);
+    say("judge", open.question);
+    openInput();
   }
 
   // ---------- 08 Deliberating ----------
@@ -1474,10 +1442,6 @@ label input:focus { border-color: var(--blue); }
 .prompt { position: relative; background: var(--white); border: 2px solid #2A2E35; border-radius: 14px; padding: 12px 16px 18px; filter: drop-shadow(0 4px 0 #2A2E35); display: flex; flex-direction: column; gap: 4px; }
 .prompt small { font-size: 12px; font-weight: 900; letter-spacing: .1em; color: #1E4384; }
 .prompt p { margin: 0; min-height: 23px; font-size: 18px; font-weight: 700; line-height: 1.3; color: #2A2E35; }
-.prompt .next { position: absolute; right: 14px; bottom: 9px; width: 12px; height: 10px; opacity: 0; transition: opacity .2s; }
-.prompt.reading { cursor: pointer; }
-.prompt.reading .next { opacity: 1; animation: blink 1.2s infinite; }
-.witness-card { cursor: default; }
 .dots { display: inline-flex; gap: 4px; padding: 8px 0; }
 .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--slate); animation: blink 1s infinite; }
 .dots i:nth-child(2) { animation-delay: .15s; }
