@@ -9,6 +9,11 @@
     header { display: flex; align-items: center; justify-content: space-between; }
     header .actions { display: flex; align-items: center; gap: 8px; }
     .btn.small img { width: 16px; height: 16px; }
+    .notice { display: flex; align-items: center; gap: 16px; padding: 16px 20px; border-radius: 16px; background: var(--gold-tint); border: 1px solid #e6d6c4; }
+    .notice div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .notice b { font-size: 16px; color: var(--gold-deep); }
+    .notice p { margin: 0; font-size: 14px; color: var(--ink); }
+    .notice .btn { min-height: 40px; padding: 8px 16px; font-size: 14px; background: var(--white); }
     .cta { display: flex; align-items: center; gap: 20px; padding: 22px 24px; border-radius: 18px; background: var(--blue-tint); border: 1.5px solid var(--blue-line); }
     .cta .ic { width: 64px; height: 64px; border-radius: 16px; background: var(--blue); display: grid; place-items: center; flex: none; }
     .cta .ic img { width: 32px; height: 32px; }
@@ -53,6 +58,10 @@
       <button class="icon-btn" id="close" aria-label="Close"><img src="assets/ui/close-18.svg" alt="" /></button>
     </div>
   </header>
+  <section class="notice" id="notice" hidden>
+    <div><b>Your last checkout wasn’t checked</b><p id="noticeText"></p></div>
+    <button class="btn secondary" id="noticeAct"></button>
+  </section>
   <section class="cta" id="cta" hidden>
     <span class="ic"><img src="assets/ui/flag-32.svg" alt="" /></span>
     <div class="text">

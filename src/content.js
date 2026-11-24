@@ -956,23 +956,39 @@
 
   // ---------- triggers ----------
 
+  // When a checkout goes through without a check-in, remember why, so the toolbar
+  // popup can explain it (and undo a "never ask" or skip-list match).
+  async function noCheckIn(reason, extra = {}) {
+    log(`No check-in: ${reason}`, extra);
+    try {
+      await chrome.storage.local.set({ lastSkip: { date: Date.now(), site: location.hostname, page: pageType(), reason, ...extra } });
+    } catch {}
+    return false;
+  }
+
   async function maybeCheckIn() {
-    if (isCleared()) {
-      log("You already went through a check-in for this checkout. Letting it through.");
-      return false;
-    }
+    if (isCleared()) return noCheckIn("you already went through a check-in for this checkout.", { kind: "pass" });
     const { settings, history, neverItems } = await getStore();
     const item = scrapeItem();
-    if (!item) {
-      log("No item found on this page.", { page: pageType(), path: location.pathname });
-      return false;
-    }
+    if (!item) return noCheckIn("couldn't read the items on this page.", { kind: "noitems", path: location.pathname });
     const { item: rest, skipped } = applySkipList(settings, neverItems, item);
     for (const s of skipped) log(`Skipping "${s.title}": ${s.why}.`);
     if (!rest) {
-      log("Everything here is on your skip list. No check-in.");
-      return false;
+      const never = skipped.filter((s) => s.why.startsWith("you asked never")).map((s) => s.title);
+      return noCheckIn(
+        never.length === skipped.length
+          ? `you chose “Never ask” for ${skipped.length === 1 ? `the ${globalThis.gicShortName(skipped[0].title)}` : "everything in this cart"}.`
+          : skipped.length === 1
+            ? `the ${globalThis.gicShortName(skipped[0].title)} is on your skip list.`
+            : never.length
+              ? `everything in this cart is on your skip list or your “Never ask” list.`
+              : `everything in this cart is on your skip list.`,
+        { kind: never.length ? "never" : "skiplist", titles: skipped.map((s) => s.title), never, why: skipped.map((s) => s.why) }
+      );
     }
+    try {
+      await chrome.storage.local.remove("lastSkip");
+    } catch {}
     log("Checking in on", rest);
     const shortList = skipped.map((s) => globalThis.gicShortName(s.title)).slice(0, 2).join(" and ");
     const note = skipped.length ? `Not counting the ${shortList}${skipped.length > 2 ? ` and ${skipped.length - 2} more` : ""}. ${skipped.length === 1 ? "It's" : "They're"} on your skip list.` : "";
