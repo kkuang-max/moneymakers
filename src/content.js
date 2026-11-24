@@ -316,7 +316,10 @@
   // Once you've chosen to go ahead, don't check in again on the next checkout step.
   const CLEARED_KEY = "mmClearedAt";
   const CLEARED_MS = 20 * 60 * 1000;
+  // The pass only covers the later steps of the same checkout ("Place your order").
+  // Clicking "Proceed to checkout" or "Buy Now" again always gets a fresh check-in.
   const isCleared = () => {
+    if (pageType() !== "checkout") return false;
     try {
       return Date.now() - Number(sessionStorage.getItem(CLEARED_KEY) || 0) < CLEARED_MS;
     } catch {
@@ -955,7 +958,7 @@
 
   async function maybeCheckIn() {
     if (isCleared()) {
-      log("Already went through a check-in in this tab in the last 20 minutes. Letting it through.");
+      log("You already went through a check-in for this checkout. Letting it through.");
       return false;
     }
     const { settings, history, neverItems } = await getStore();
@@ -990,11 +993,22 @@
         return;
       }
       if (isCleared()) return;
+      // After the extension is reloaded, the copy left running in an open tab can't
+      // reach its storage any more. Never block checkout from a stale copy.
+      if (!chrome.runtime?.id) {
+        console.warn("[MM] The extension was reloaded. Refresh this tab to get check-ins again.");
+        return;
+      }
       e.preventDefault();
       e.stopImmediatePropagation();
       pendingButton = btn;
-      const shown = await maybeCheckIn();
-      if (!shown) proceedWithPurchase(); // nothing to check, let it through
+      let shown = false;
+      try {
+        shown = await maybeCheckIn();
+      } catch (err) {
+        console.warn("[MM] Check-in failed, letting the purchase through:", err?.message || err);
+      }
+      if (!shown) proceedWithPurchase(); // nothing to check (or something went wrong): let it through
     },
     true
   );
