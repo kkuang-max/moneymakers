@@ -144,6 +144,17 @@
 
   // Cart rows carry data-producttitle / data-price / data-quantity (checked on live amazon.com/cart, Nov 2026).
   // Only read rows inside the active cart: "Saved for later" uses the same row markup.
+  // Amazon checks out only the cart items whose "select" checkbox is ticked.
+  // (Not the "This is a gift" checkbox, which some rows also have.)
+  function isUnselected(row) {
+    const flag = row.dataset.isselected ?? row.getAttribute("data-is-selected");
+    if (flag != null) return flag === "0" || flag === "false";
+    const box =
+      row.querySelector(".sc-item-check-checkbox-selector input[type=checkbox], input[type=checkbox][name*='item-check' i], input[type=checkbox][aria-label^='select' i]") ||
+      [...row.querySelectorAll("input[type=checkbox]")].find((b) => !b.closest("[class*=gift i], [id*=gift i]") && !/gift/i.test(b.closest("label")?.textContent || b.getAttribute("aria-label") || ""));
+    return !!box && !box.checked;
+  }
+
   function scrapeCart() {
     const seen = new Set();
     const items = [];
@@ -151,6 +162,7 @@
       const asin = row.dataset.asin;
       if (!asin || seen.has(asin)) continue;
       seen.add(asin);
+      if (isUnselected(row)) continue; // in the cart, but not part of this checkout
       const title = row.dataset.producttitle || firstText([".sc-product-title", ".a-truncate-full", "a.sc-product-link"], row);
       if (!title) continue;
       items.push({
@@ -672,7 +684,7 @@
             ${img("ui/next.svg", "next")}
           </div>
           <form class="composer" id="composer">
-            <input id="answer" autocomplete="off" placeholder="Type your answer to the judge…" aria-label="Your answer to the judge" disabled />
+            <input id="answer" autocomplete="off" placeholder="Type your answer to the judge…" aria-label="Your answer to the judge" />
             <button class="send" aria-label="Send" disabled>${img("ui/arrow.svg")}</button>
           </form>
         </div>
@@ -785,6 +797,15 @@
           resolve();
         };
         const onKey = (e) => {
+          // In the answer box, typing (spaces included) just types. Enter there skips
+          // the wait but doesn't send: what you wrote stays, and the next Enter sends it.
+          if (e.target === input) {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              done();
+            }
+            return;
+          }
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             done();
@@ -809,9 +830,13 @@
         stop();
       }
     }
+    // You can type at any time. Sending waits until it's your turn (the judge has asked).
+    let yourTurn = false;
+    send.disabled = true;
+    input.focus();
     function openInput() {
-      input.disabled = send.disabled = false;
-      input.value = "";
+      yourTurn = true;
+      send.disabled = false;
       input.focus();
     }
 
@@ -825,8 +850,9 @@
     $("#composer").onsubmit = async (e) => {
       e.preventDefault();
       const answer = input.value.trim();
-      if (!answer || input.disabled) return;
-      input.disabled = send.disabled = true;
+      if (!answer || !yourTurn) return;
+      yourTurn = false;
+      send.disabled = true;
       input.value = "";
       say("defendant", answer);
 
