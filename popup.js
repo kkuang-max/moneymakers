@@ -9,8 +9,36 @@ $("setGoal").onclick = () => chrome.runtime.openOptionsPage();
 
 const isSave = (h) => h.outcome === "saved" || h.outcome === "kept";
 
+// Why the last checkout went through without a check-in (set by the content script).
+async function renderNotice(lastSkip) {
+  const box = $("notice");
+  box.hidden = !lastSkip || Date.now() - lastSkip.date > 2 * 60 * 60 * 1000 || lastSkip.kind === "pass";
+  if (box.hidden) return;
+  $("noticeText").textContent = `On ${lastSkip.site.replace(/^www\./, "")}: ${lastSkip.reason[0].toUpperCase()}${lastSkip.reason.slice(1)}`;
+  const act = $("noticeAct");
+  if (lastSkip.kind === "never") {
+    act.textContent = "Ask about it again";
+    act.onclick = async () => {
+      const { neverItems } = await chrome.storage.local.get({ neverItems: [] });
+      await chrome.storage.local.set({ neverItems: neverItems.filter((t) => !lastSkip.never.includes(t)) });
+      await chrome.storage.local.remove("lastSkip");
+      render();
+    };
+  } else if (lastSkip.kind === "skiplist") {
+    act.textContent = "Edit skip list";
+    act.onclick = () => chrome.runtime.openOptionsPage();
+  } else {
+    act.textContent = "Dismiss";
+    act.onclick = async () => {
+      await chrome.storage.local.remove("lastSkip");
+      render();
+    };
+  }
+}
+
 async function render() {
-  const { history, settings } = await chrome.storage.local.get({ history: [], settings: {} });
+  const { history, settings, lastSkip } = await chrome.storage.local.get({ history: [], settings: {}, lastSkip: null });
+  renderNotice(lastSkip);
   const saved = (Number(settings.savedSoFar) || 0) + history.filter(isSave).reduce((t, h) => t + (h.total || 0), 0);
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
   $("month").textContent = money(history.filter((h) => isSave(h) && h.date >= monthStart).reduce((t, h) => t + (h.total || 0), 0));

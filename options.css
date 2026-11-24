@@ -36,3 +36,6 @@ code { font-size: 12px; background: var(--bill); padding: 1px 5px; border-radius
   .window { border-radius: 0; box-shadow: none; padding: 20px 16px 40px; }
   .add-row { flex-direction: column; align-items: stretch; }
 }
+.never { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.never .token { max-width: 100%; }
+.never .token span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

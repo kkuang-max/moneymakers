@@ -75,6 +75,34 @@ const closeTab = () => chrome.tabs.getCurrent((t) => (t ? chrome.tabs.remove(t.i
 document.getElementById("close").onclick = closeTab;
 document.getElementById("back").onclick = () => (history.length > 1 ? history.back() : closeTab());
 
+// Items you clicked "Never ask about this item" on, each removable.
+async function renderNever() {
+  const { neverItems } = await chrome.storage.local.get({ neverItems: [] });
+  const box = document.getElementById("never");
+  document.getElementById("neverBox").hidden = !neverItems.length;
+  box.replaceChildren();
+  for (const t of neverItems) {
+    const tok = document.createElement("span");
+    tok.className = "token";
+    const label = document.createElement("span");
+    label.textContent = t;
+    tok.title = t;
+    const x = document.createElement("button");
+    x.type = "button";
+    x.setAttribute("aria-label", `Ask about ${t} again`);
+    x.innerHTML = '<img src="assets/ui/x-blue.svg" alt="" />';
+    x.onclick = async () => {
+      const { neverItems: all } = await chrome.storage.local.get({ neverItems: [] });
+      await chrome.storage.local.set({ neverItems: all.filter((n) => n !== t) });
+      renderNever();
+      flash("Will ask about it again");
+    };
+    tok.append(label, x);
+    box.append(tok);
+  }
+}
+renderNever();
+
 document.getElementById("reset").onclick = async () => {
   await chrome.storage.local.set({ history: [], recess: {}, wishlist: [], neverItems: [] });
   flash("History cleared");

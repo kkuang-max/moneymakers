@@ -20,7 +20,7 @@ Nothing gets bought by the extension. It only pauses the checkout button and cli
 Follows the "User flow map" and "Update user Flow" diagrams in the team's Figma.
 
 1. **Shopping online.** You add something to your cart.
-2. **You click a checkout button.** The skip list is checked item by item (title, plus Amazon's category on product pages). Skipped items don't count toward the price. If everything is on the skip list, there's no pop-up at all. Words for each category are in `SKIP_WORDS` in `src/content.js`.
+2. **You click a checkout button.** The skip list is checked item by item, for the items ticked for checkout. It matches each item's name and its Amazon category (looked up in the background as soon as the cart opens, then remembered). Skipped items don't count toward the price. If everything is on the skip list, there's no pop-up at all. Words for each category are in `SKIP_WORDS` in `src/content.js`.
 3. **Quick check pop-up.**
    - "You're right. I'll save it": the money counts toward your goal, the item goes to your wishlist.
    - "Yes, I want it": the trial starts. With more than one item, you first pick which one to defend.
