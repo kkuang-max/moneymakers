@@ -1463,7 +1463,8 @@ label input:focus { border-color: var(--blue); }
 .prompt { position: relative; background: var(--white); border: 2px solid #2A2E35; border-radius: 14px; padding: 12px 16px 18px; filter: drop-shadow(0 4px 0 #2A2E35); display: flex; flex-direction: column; gap: 4px; }
 .prompt small { font-size: 12px; font-weight: 900; letter-spacing: .1em; color: #1E4384; }
 .prompt p { margin: 0; min-height: 23px; font-size: 18px; font-weight: 700; line-height: 1.3; color: #2A2E35; }
-.prompt .count { position: absolute; right: 14px; bottom: 8px; font-size: 12px; font-weight: 800; letter-spacing: .04em; color: var(--slate); font-variant-numeric: tabular-nums; }
+/* the 1/2 counter sits on its own row under the text, so long lines never run into it */
+.prompt .count { align-self: flex-end; margin: 8px -2px -6px 0; font-size: 12px; font-weight: 800; letter-spacing: .04em; line-height: 1; color: var(--slate); font-variant-numeric: tabular-nums; }
 .dots { display: inline-flex; gap: 4px; padding: 8px 0; }
 .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--slate); animation: blink 1s infinite; }
 .dots i:nth-child(2) { animation-delay: .15s; }
