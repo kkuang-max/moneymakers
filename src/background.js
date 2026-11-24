@@ -202,5 +202,9 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   // Older builds called OpenRouter mode "live".
   const { settings } = await chrome.storage.local.get("settings");
   if (settings?.mode === "live") await chrome.storage.local.set({ settings: { ...settings, mode: "openrouter" } });
-  if (reason === "install") chrome.runtime.openOptionsPage();
+  // First install opens the setup flow (Figma "Setup pages"). Existing installs that
+  // never went through it (they predate it) get it once on their next update or reload.
+  if (reason === "install" || (reason === "update" && !settings?.setupDone)) {
+    chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html") });
+  }
 });

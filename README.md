@@ -8,7 +8,7 @@ Screens follow the team's Figma file (Low-Mid-Fi Wireframes Iteration 2, "Hi-fi 
 
 1. Download this repo: **Code → Download ZIP** and unzip it, or `git clone` it.
 2. Open `chrome://extensions`, turn on **Developer mode** (top right), click **Load unpacked**, and pick the unzipped folder.
-3. The settings page opens. Add a savings goal if you want (or leave it blank).
+3. The setup tab opens: welcome, an optional savings goal, your skip list, then you're all set. (To see it again: **Settings → Court settings → Run setup again**.)
 4. Go to amazon.com or amazon.ca and click **Buy Now** on a product, or **Proceed to checkout** in your cart.
 
 After pulling new changes, click the reload icon on the extension in `chrome://extensions`, then refresh the Amazon tab.
@@ -79,9 +79,10 @@ None of these affect scripted mode. For that, edit `LINES` and `QUESTIONS` in `s
 | `src/content.js` | Finds the item, pauses the checkout button, draws every screen (shadow DOM) |
 | `src/background.js` | AI court (Anthropic or OpenRouter) and the Urbanist font |
 | `assets/characters/` | Judge and defendant art from the Figma "Character" sheet. One judge is picked at random per check-in; the defendant is set in Settings |
-| `assets/ui/` | Pop-up border, medallion, courtroom bench and icons from the Figma |
+| `assets/ui/` | Pop-up border, medallion, courtroom bench, icons and the piggy-bank animation (loading and deliberating screens) |
 | `personality/` | Judge and witness personalities, plus example trials, for AI mode |
-| `options.*`, `popup.*`, `ui.css` | Settings page and toolbar popup |
+| `welcome.*` | First-time setup flow (Figma "Setup pages" S1 to S5), opened on install |
+| `options.*`, `popup.*`, `ui.css`, `shared.js` | Settings page and toolbar popup (Figma "Settings" and "Home window"), plus shared styles and helpers |
 | `test/` | Mock Amazon cart and product pages for offline testing |
 
 Debugging: open DevTools on the Amazon tab and filter the console by `[MM]`. It logs why a check-in did or didn't appear and how each answer was scored.

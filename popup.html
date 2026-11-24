@@ -4,48 +4,71 @@
   <meta charset="utf-8" />
   <link rel="stylesheet" href="ui.css" />
   <style>
-    body { width: 440px; padding: 16px; background: var(--white); display: flex; flex-direction: column; gap: 12px; }
+    /* Figma "Home window" (E15 no goal, E16 goal set). Chrome caps popups at 800px wide. */
+    body { width: 760px; padding: 28px 32px 32px; display: flex; flex-direction: column; gap: 20px; }
     header { display: flex; align-items: center; justify-content: space-between; }
-    .grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 10px; }
-    .goal { display: flex; flex-direction: column; gap: 6px; }
-    .goal b { font-size: 22px; line-height: 1.15; }
-    .goal .foot { display: flex; justify-content: space-between; font-size: 12px; }
-    .stats { display: flex; flex-direction: column; gap: 10px; }
-    .stats .card { padding: 10px 14px; }
-    .stats b { display: block; font-size: 22px; line-height: 1.2; }
-    h3 { margin: 6px 0 0; font-size: 15px; }
-    ul { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
-    li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--line); cursor: pointer; }
+    header .actions { display: flex; align-items: center; gap: 8px; }
+    .btn.small img { width: 16px; height: 16px; }
+    .cta { display: flex; align-items: center; gap: 20px; padding: 22px 24px; border-radius: 18px; background: var(--blue-tint); border: 1.5px solid var(--blue-line); }
+    .cta .ic { width: 64px; height: 64px; border-radius: 16px; background: var(--blue); display: grid; place-items: center; flex: none; }
+    .cta .ic img { width: 32px; height: 32px; }
+    .cta .text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+    .cta .text b { font-size: 22px; line-height: 1.2; }
+    .cta .text p { margin: 0; color: var(--seal); }
+    .grid { display: flex; gap: 16px; align-items: flex-start; }
+    .main-card { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+    .main-card .big { font-size: 28px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+    .main-card .row { display: flex; justify-content: space-between; gap: 12px; font-weight: 600; }
+    .stats { width: 220px; display: flex; flex-direction: column; gap: 16px; flex: none; }
+    .stat { padding: 14px 18px; display: flex; flex-direction: column; gap: 2px; }
+    .stat b { font-size: 26px; line-height: 1.2; }
+    h2 { margin-bottom: -6px; }
+    ul { list-style: none; margin: 0; padding: 0; background: var(--white); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+    li { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-top: 1px solid var(--line); cursor: pointer; }
     li:first-child { border-top: 0; }
     li:hover { background: var(--bill); }
-    li .ic { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--blue); color: var(--white); }
-    li .ic.green { background: var(--green); color: var(--green-deep); }
-    li .ic.plain { background: var(--bill); color: var(--seal); }
-    li .t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-    li .t b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    li .ic { width: 36px; height: 36px; border-radius: 18px; display: grid; place-items: center; flex: none; background: var(--blue); }
+    li .ic img { width: 18px; height: 18px; }
+    li .ic.green { background: var(--green); }
+    li .ic.plain { background: var(--line); }
+    li .t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    li .t b { font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    li .t span { font-size: 13px; color: var(--seal); }
     li.empty { cursor: default; color: var(--seal); }
     li.empty:hover { background: none; }
-    .tx { display: none; border: 1px solid var(--line); border-radius: 14px; padding: 12px; font-size: 13px; max-height: 240px; overflow-y: auto; }
-    .tx.open { display: block; }
+    .tx { border: 1px solid var(--line); border-radius: 16px; padding: 14px 18px; font-size: 14px; max-height: 240px; overflow-y: auto; background: var(--white); }
     .tx p { margin: 0 0 6px; }
-    .tx .court { color: var(--seal); font-size: 12px; font-weight: 600; text-align: center; }
+    .tx .court { color: var(--seal); font-size: 13px; font-weight: 600; text-align: center; }
   </style>
 </head>
 <body>
   <header>
-    <div class="brand"><img src="icons/logo.svg" alt="" />Guilty If Charged</div>
-    <button class="btn ghost" id="settings">Settings</button>
+    <div class="brand"><img src="assets/ui/logo.svg" alt="" />Money Makers</div>
+    <div class="actions">
+      <button class="btn small" id="settings"><img src="assets/ui/gear.svg" alt="" />Settings</button>
+      <button class="icon-btn" id="close" aria-label="Close"><img src="assets/ui/close-18.svg" alt="" /></button>
+    </div>
   </header>
+  <section class="cta" id="cta" hidden>
+    <span class="ic"><img src="assets/ui/flag-32.svg" alt="" /></span>
+    <div class="text">
+      <b>Saving for something?</b>
+      <p>Give your savings a goal and every skip gets you closer. Pick one to start, you can change it anytime.</p>
+      <div class="suggest" id="suggest"></div>
+    </div>
+    <button class="btn primary" id="setGoal">Set a goal</button>
+  </section>
   <div class="grid">
-    <div class="card goal" id="goal"></div>
+    <div class="card main-card" id="main"></div>
     <div class="stats">
-      <div class="card"><span class="tiny">Saved this month</span><b id="month">$0</b></div>
-      <div class="card"><span class="tiny">Cases heard</span><b id="cases">0</b></div>
+      <div class="card stat"><span class="tiny">Saved this month</span><b id="month">$0</b></div>
+      <div class="card stat"><span class="tiny">Cases heard</span><b id="cases">0</b></div>
     </div>
   </div>
-  <h3>Recent cases</h3>
-  <ul id="history"><li class="empty">No cases yet. They'll show up here after your next checkout.</li></ul>
-  <div class="tx" id="tx"></div>
+  <h2 id="recentTitle" hidden>Recent cases</h2>
+  <ul id="history" hidden></ul>
+  <div class="tx" id="tx" hidden></div>
+  <script src="shared.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

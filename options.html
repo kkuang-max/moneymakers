@@ -3,52 +3,54 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Guilty If Charged · Settings</title>
+  <title>Money Makers · Settings</title>
   <link rel="stylesheet" href="ui.css" />
   <link rel="stylesheet" href="options.css" />
 </head>
 <body>
-  <main>
+  <main class="window">
     <header class="top">
-      <div class="brand"><img src="icons/logo.svg" alt="" />Guilty If Charged</div>
+      <button type="button" class="btn small" id="back"><img src="assets/ui/back-16.svg" alt="" />Back</button>
       <h1>Settings</h1>
-      <span class="status" id="status" role="status"></span>
+      <div class="right">
+        <span class="status" id="status" role="status"></span>
+        <button type="button" class="icon-btn" id="close" aria-label="Close"><img src="assets/ui/close-18.svg" alt="" /></button>
+      </div>
     </header>
 
     <form id="form" autocomplete="off">
       <section class="card">
-        <h2>Savings goal</h2>
-        <p class="sub">Optional. Without a goal, everything you skip still adds up in your savings.</p>
-        <div class="grid3">
-          <label>What are you saving for?<input name="goalName" placeholder="Spring break trip" /></label>
-          <label>Amount<input name="goalAmount" type="number" min="0" step="1" placeholder="600" /></label>
-          <label>By<input name="goalDate" type="date" /></label>
+        <div class="heading">
+          <h2>Savings goal</h2>
+          <p class="sub">Optional. Without a goal, everything you skip still adds up in your savings.</p>
         </div>
-        <label class="narrow">Already saved <span class="tiny">optional</span><input name="savedSoFar" type="number" min="0" step="1" placeholder="0" /></label>
+        <div class="pick" id="quickStart"><span class="tiny">Quick start</span><div class="suggest" id="suggest"></div></div>
+        <div class="fields">
+          <label class="field">What are you saving for?<input name="goalName" placeholder="Spring break trip" /></label>
+          <label class="field">Amount<input name="goalAmount" type="number" min="0" step="1" placeholder="600" /></label>
+          <label class="field">By<input name="goalDate" type="date" /></label>
+        </div>
         <div class="row">
           <button type="button" class="btn primary" id="updateGoal">Update goal</button>
-          <button type="button" class="link" id="removeGoal">Remove goal, just save</button>
+          <button type="button" class="btn ghost" id="removeGoal">Remove goal, just save</button>
         </div>
       </section>
 
-      <section class="card">
-        <h2>Skip these purchases</h2>
-        <p class="sub">Essentials won't trigger a check-in. Pick from the list or add your own.</p>
-        <div class="chips" id="chips">
-          <button type="button" class="chip" data-skip="groceries"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Groceries</button>
-          <button type="button" class="chip" data-skip="textbooks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Textbooks</button>
-          <button type="button" class="chip" data-skip="medicine"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Medicine</button>
-          <button type="button" class="chip" data-skip="bills"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Bills</button>
-          <button type="button" class="chip" data-skip="gifts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Gifts</button>
-          <button type="button" class="chip" data-skip="toiletries"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Toiletries</button>
-          <button type="button" class="chip" data-skip="transit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Transit</button>
+      <section class="card" id="skips">
+        <div class="heading">
+          <h2>Skip these purchases</h2>
+          <p class="sub">Essentials won’t trigger a check-in. Pick from the list or add your own.</p>
         </div>
-        <label>Add a product or store <span class="tiny">comma separated</span><input name="skipCustom" placeholder="Contact lenses, Chegg" /></label>
+        <div class="chips"></div>
+        <div class="add-row"><label class="field">Add a product or store<input placeholder="Contact lenses, Chegg" /></label><button type="button" class="btn secondary" data-add>Add</button></div>
+        <div class="tokens"></div>
       </section>
 
       <section class="card">
-        <h2>Your character in court</h2>
-        <p class="sub">The defendant you play when a quick check goes to trial.</p>
+        <div class="heading">
+          <h2>Your character in court</h2>
+          <p class="sub">The defendant you play when a quick check goes to trial.</p>
+        </div>
         <div class="defendants" role="radiogroup" aria-label="Defendant">
           <label class="defendant"><input type="radio" name="defendant" value="1" checked /><img src="assets/characters/defendant-1.png" alt="" /><span>Defendant 1</span></label>
           <label class="defendant"><input type="radio" name="defendant" value="2" /><img src="assets/characters/defendant-2.png" alt="" /><span>Defendant 2</span></label>
@@ -57,7 +59,8 @@
 
       <details class="card dev" id="dev">
         <summary><h2>Court settings</h2><span class="tiny">For testing</span></summary>
-        <label>Who runs the court?
+        <label class="field narrow">Already saved <input name="savedSoFar" type="number" min="0" step="1" placeholder="0" /></label>
+        <label class="field">Who runs the court?
           <select name="mode">
             <option value="scripted">Scripted (no AI, free)</option>
             <option value="anthropic">Claude, with an Anthropic API key</option>
@@ -66,10 +69,10 @@
         </label>
 
         <div class="mode-fields" data-mode="anthropic" hidden>
-          <label>Anthropic API key <span class="tiny">From platform.claude.com. Stored only in this browser.</span>
+          <label class="field">Anthropic API key <span class="tiny">From platform.claude.com. Stored only in this browser.</span>
             <input name="anthropicKey" type="password" placeholder="sk-ant-..." />
           </label>
-          <label>Model
+          <label class="field">Model
             <select name="anthropicModel">
               <option value="claude-haiku-5-5">Claude Haiku 5.5 · fastest, cheapest ($0.10 / $0.50 per M tokens)</option>
               <option value="claude-sonnet-5-5">Claude Sonnet 5.5 · better writing, slower</option>
@@ -80,10 +83,10 @@
         </div>
 
         <div class="mode-fields" data-mode="openrouter" hidden>
-          <label>OpenRouter key <span class="tiny">Stored only in this browser.</span>
+          <label class="field">OpenRouter key <span class="tiny">Stored only in this browser.</span>
             <input name="openrouterKey" type="password" placeholder="sk-or-..." />
           </label>
-          <label>Model <span class="tiny">Any OpenRouter model ID. Prices per million tokens, in / out.</span>
+          <label class="field">Model <span class="tiny">Any OpenRouter model ID. Prices per million tokens, in / out.</span>
             <input name="openrouterModel" list="models" placeholder="anthropic/claude-haiku-5.5" />
             <datalist id="models">
               <option value="anthropic/claude-haiku-5.5">Claude Haiku 5.5 · $0.10 / $0.50</option>
@@ -96,11 +99,13 @@
 
         <p class="tiny">The judge's personality is in <code>personality/judge.md</code> and the witness's in <code>personality/witness.md</code>. They're used when an AI runs the court.</p>
         <div class="row">
-          <button type="button" class="btn ghost" id="reset">Clear history and savings log</button>
+          <button type="button" class="btn secondary" id="reset">Clear history and savings log</button>
+          <a class="btn ghost" href="welcome.html">Run setup again</a>
         </div>
       </details>
     </form>
   </main>
+  <script src="shared.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

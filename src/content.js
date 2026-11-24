@@ -439,7 +439,7 @@
           ? ""
           : `<button class="card row-link" data-act="goal">${ICON.flag}<span><b>Give your savings a goal</b><small>A trip, a laptop, a safety net. Every dollar you skip counts toward it.</small></span>${ICON.arrow}</button>`
       }
-      <div class="card wish"><span class="thumb"></span><span>${esc(short)} is on your Guilty If Charged wishlist.${by ? ` Revisit it after ${esc(by)}.` : ""}</span></div>
+      <div class="card wish"><span class="thumb"></span><span>${esc(short)} is on your Money Makers wishlist.${by ? ` Revisit it after ${esc(by)}.` : ""}</span></div>
       <button class="btn primary" data-act="done">Done</button>`;
     if (style === "panel") showPanel(html);
     else showPage(`<div class="card-lg">${html}</div>`, "centered");
@@ -520,6 +520,25 @@
     const transcript = [];
     const state = { answers: [], round: 1, totalRounds: flow.RULES.rounds, witnessCalled: false, witness: null };
     let warned = false;
+    const ctx = (extra = {}) => ({
+      item: { label: item.label, short, total: item.total, currency: item.currency, items: item.items, site: item.site },
+      profile,
+      transcript,
+      answers: state.answers,
+      round: state.round,
+      rounds_planned: state.totalRounds,
+      ...extra,
+    });
+
+    // Loading screen: the piggy bank animation while the judge reads the case file.
+    showPage(`
+      <div class="card-lg loading">
+        ${img("ui/piggy-bank.gif", "piggy")}
+        <h2 class="h2 center">Court is now in session…</h2>
+        <p class="muted center">The judge is reading your case for ${item.items.length > 1 ? "this cart" : `the ${esc(short)}`}.</p>
+      </div>`, "centered");
+    const openP = courtTurn("open", ctx(), settings);
+    const [open] = await Promise.all([openP, wait(2200)]);
 
     // E07 "Courtroom rounds": a battle-style stage (the judge at the bench, you
     // seen from behind), a status row, the judge's current line and your answer box.
@@ -652,21 +671,39 @@
       }
       return () => stage.classList.remove("thinking");
     }
-    const readPause = (t) => wait(Math.min(1400, 350 + t.length * 12));
+    // Hold each line long enough to read (about 3 words a second, at least 2.5s).
+    // Clicking the line, or pressing Enter, moves on sooner.
+    const promptBox = $(".prompt");
+    function readPause(t) {
+      const words = String(t || "").split(/\s+/).filter(Boolean).length;
+      const ms = Math.min(9000, Math.max(2500, 1500 + words * 330));
+      promptBox.classList.add("reading");
+      return new Promise((resolve) => {
+        const done = () => {
+          clearTimeout(timer);
+          promptBox.removeEventListener("click", done);
+          witnessEl.removeEventListener("click", done);
+          layer.removeEventListener("keydown", onKey, true);
+          promptBox.classList.remove("reading");
+          resolve();
+        };
+        const onKey = (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            done();
+          }
+        };
+        const timer = setTimeout(done, ms);
+        promptBox.addEventListener("click", done);
+        witnessEl.addEventListener("click", done);
+        layer.addEventListener("keydown", onKey, true);
+      });
+    }
     const fallbackNote = (err) => {
       if (warned) return;
       warned = true;
       moment(`AI court unavailable (${err}). Using the scripted court for now.`);
     };
-    const ctx = (extra = {}) => ({
-      item: { label: item.label, short, total: item.total, currency: item.currency, items: item.items, site: item.site },
-      profile,
-      transcript,
-      answers: state.answers,
-      round: state.round,
-      rounds_planned: state.totalRounds,
-      ...extra,
-    });
     async function ask(stage, extra, who = "judge") {
       const stop = typing(who);
       try {
@@ -682,7 +719,6 @@
     }
 
     // Opening
-    const open = await ask("open");
     say("judge", open.opening);
     await readPause(open.opening);
     say("judge", open.question);
@@ -709,7 +745,7 @@
       const step = flow.next(state);
       if (step.action === "rule") {
         moment(step.moment);
-        await wait(1200);
+        await readPause(step.moment);
         if (state.left) return;
         return deliberate(item, settings, history, profile, state, transcript, ctx);
       }
@@ -717,7 +753,7 @@
         moment(step.moment);
         state.witnessCalled = true;
         state.witness = flow.pickWitness(state);
-        await wait(600);
+        await readPause(step.moment);
         const w = await ask("witness", { witness: state.witness }, "witness");
         say("witness", w.says);
         await readPause(w.says);
@@ -729,6 +765,7 @@
       }
       if (step.action === "recess") {
         moment(step.moment);
+        await readPause(step.moment);
         state.totalRounds += 1;
       }
       state.round += 1;
@@ -751,7 +788,7 @@
     ].filter(Boolean);
     showPage(`
       <div class="card-lg">
-        <div class="rocking">${img("ui/scale.svg")}</div>
+        ${img("ui/piggy-bank.gif", "piggy")}
         <h2 class="h2 center">The court is deliberating…</h2>
         <p class="muted center">Hang tight, this takes a few seconds.</p>
         <ul class="checks">${steps.map(([t, s]) => `<li><span class="tick">${img("ui/tick.svg")}</span><span><b>${esc(t)}</b>${s ? `<small>${esc(s)}</small>` : ""}</span></li>`).join("")}</ul>
@@ -761,7 +798,7 @@
     const items = [...layer.querySelectorAll(".checks li")];
     for (const li of items) {
       li.classList.add("active");
-      await wait(1500);
+      await wait(1900);
       li.classList.replace("active", "done");
       await wait(250);
     }
@@ -1050,9 +1087,9 @@ label input:focus { border-color: var(--blue); }
 .reason.r-plain { background: var(--bill); border: 1px solid var(--line); }
 
 /* ---- deliberating ---- */
-.page.centered .card-lg:has(.rocking) { width: 460px; padding: 36px 32px 32px; gap: 14px; }
-.rocking { width: 92px; height: 92px; border-radius: 50%; background: var(--blue-tint); border: 2.5px dashed var(--blue); display: grid; place-items: center; align-self: center; }
-.rocking img { width: 42px; height: 42px; animation: rock 1.6s ease-in-out infinite; }
+.page.centered .card-lg:has(.piggy) { width: 460px; padding: 32px 32px 32px; gap: 14px; }
+/* the piggy-bank animation sits on its own cream background */
+.piggy { width: 200px; height: 200px; align-self: center; border-radius: 24px; background: #FFF9EF; margin-bottom: 2px; }
 .checks { list-style: none; margin: 0; padding: 8px 0 0; display: flex; flex-direction: column; gap: 12px; }
 .checks li { display: flex; gap: 12px; align-items: flex-start; color: var(--slate); font-size: 15px; line-height: 1.4; }
 .checks li > span:last-child { display: flex; flex-direction: column; gap: 2px; }
@@ -1138,7 +1175,10 @@ label input:focus { border-color: var(--blue); }
 .prompt { position: relative; background: var(--white); border: 2px solid #2A2E35; border-radius: 14px; padding: 12px 16px 18px; filter: drop-shadow(0 4px 0 #2A2E35); display: flex; flex-direction: column; gap: 4px; }
 .prompt small { font-size: 12px; font-weight: 900; letter-spacing: .1em; color: #1E4384; }
 .prompt p { margin: 0; min-height: 23px; font-size: 18px; font-weight: 700; line-height: 1.3; color: #2A2E35; }
-.prompt .next { position: absolute; right: 14px; bottom: 9px; width: 12px; height: 10px; animation: blink 1.2s infinite; }
+.prompt .next { position: absolute; right: 14px; bottom: 9px; width: 12px; height: 10px; opacity: 0; transition: opacity .2s; }
+.prompt.reading { cursor: pointer; }
+.prompt.reading .next { opacity: 1; animation: blink 1.2s infinite; }
+.witness-card { cursor: default; }
 .dots { display: inline-flex; gap: 4px; padding: 8px 0; }
 .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--slate); animation: blink 1s infinite; }
 .dots i:nth-child(2) { animation-delay: .15s; }
@@ -1156,7 +1196,6 @@ label input:focus { border-color: var(--blue); }
 @keyframes fade { from { opacity: 0; } }
 @keyframes blink { 50% { opacity: .3; } }
 @keyframes spin { to { transform: rotate(360deg); } }
-@keyframes rock { 0%, 100% { transform: rotate(-10deg); } 50% { transform: rotate(10deg); } }
 @keyframes ponder { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-3deg); } 70% { transform: rotate(3deg); } }
 @keyframes nudge { 30% { transform: translateX(10px); } }
 @keyframes pop { 0% { opacity: 0; transform: rotate(-8deg) scale(.4); } 20% { opacity: 1; transform: rotate(-8deg) scale(1.1); } 70% { opacity: 1; } 100% { opacity: 0; transform: rotate(-8deg); } }
