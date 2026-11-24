@@ -23,20 +23,49 @@
   // Fallback: match the button's visible label. Covers "Place your order in CAD" etc.
   const BUY_TEXT = /\b(proceed to (retail )?checkout|place (your )?order|buy now|continue to checkout)\b/i;
 
-  // "Skip these purchases" chips on the settings page. Items whose title matches
-  // never trigger a check-in.
+  // "Skip these purchases" chips (setup and Settings). An item whose title, or on a
+  // product page its Amazon category, matches one of these never triggers a check-in.
+  // Whole words, plural "s" allowed.
   const SKIP_WORDS = {
-    groceries: ["grocery", "snack", "coffee", "cereal", "pasta", "rice", "milk", "bread", "oatmeal", "granola"],
-    textbooks: ["textbook", "isbn", "workbook", "study guide", "lab manual", "loose-leaf", "loose leaf"],
-    medicine: [
-      "melatonin", "sleep aid", "vitamin", "supplement", "allergy", "antihistamine", "cold & flu", "cough", "pain relief",
-      "ibuprofen", "acetaminophen", "tylenol", "advil", "aspirin", "bandage", "first aid", "prescription", "medicine",
-      "thermometer", "contact lens", "sunscreen",
+    groceries: [
+      "grocery", "groceries", "snack", "coffee", "cereal", "pasta", "noodle", "rice", "milk", "oat milk", "bread", "bagel",
+      "oatmeal", "oats", "granola", "flour", "sugar", "butter", "cheese", "yogurt", "banana", "berries",
+      "vegetable", "spinach", "lettuce", "potato", "onion", "tomato", "chicken", "beef", "pork", "turkey", "fish", "tuna", "salmon",
+      "lentil", "soup", "broth", "sauce", "salsa", "ketchup", "spice", "seasoning", "olive oil", "cooking oil", "vinegar",
+      "peanut butter", "jam", "honey", "syrup", "cracker", "cookie", "almond", "trail mix", "juice", "soda",
+      "sparkling water", "protein bar", "granola bar", "baby formula", "baby food", "pantry", "gourmet food",
     ],
-    bills: [],
-    gifts: ["gift"],
-    toiletries: ["toothpaste", "toothbrush", "floss", "deodorant", "shampoo", "conditioner", "soap", "tampon", "pads", "razor", "toilet paper", "paper towel"],
-    transit: ["transit", "bus pass", "presto", "metrocard"],
+    textbooks: [
+      "textbook", "isbn", "workbook", "study guide", "lab manual", "loose-leaf", "loose leaf", "course book", "coursebook",
+      "solutions manual", "access code", "mylab", "cengage", "pearson", "mcgraw hill", "wiley",
+    ],
+    medicine: [
+      "medicine", "medication", "prescription", "pharmacy", "melatonin", "sleep aid", "vitamin", "multivitamin", "supplement",
+      "probiotic", "allergy", "antihistamine", "cold & flu", "cold and flu", "flu", "cough", "throat lozenge", "pain relief",
+      "pain reliever", "ibuprofen", "acetaminophen", "naproxen", "tylenol", "advil", "aleve", "motrin", "aspirin", "claritin",
+      "zyrtec", "benadryl", "pepto", "antacid", "tums", "nasal spray", "eye drops", "inhaler", "bandage", "band-aid", "first aid",
+      "thermometer", "contact lens", "contact solution", "sunscreen", "covid test", "pregnancy test", "prenatal", "tablets",
+      "capsules", "caplets", "softgels", "health care",
+    ],
+    bills: [
+      "bill", "bill payment", "utility", "electricity", "internet plan", "phone plan", "prepaid plan", "top up", "top-up", "reload",
+      "membership", "membership fee", "subscription", "renewal", "insurance", "rent", "tuition", "prime membership",
+    ],
+    gifts: [
+      "gift", "gift card", "egift", "gift set", "gift basket", "gift box", "wrapping paper",
+      "gift wrap", "greeting card",
+    ],
+    toiletries: [
+      "toothpaste", "toothbrush", "floss", "mouthwash", "deodorant", "antiperspirant", "shampoo", "conditioner", "soap",
+      "body wash", "hand wash", "face wash", "cleanser", "lotion", "moisturizer", "lip balm", "tampon", "menstrual pad", "maxi pad", "menstrual",
+      "razor", "razor blade", "shaving cream", "toilet paper", "paper towel", "tissue", "wipes", "diaper", "cotton swab", "q-tips",
+      "hand sanitizer", "sanitizer", "laundry detergent", "detergent", "dish soap", "dishwasher pod", "trash bag", "personal care",
+      "oral care",
+    ],
+    transit: [
+      "transit", "bus pass", "bus ticket", "train ticket", "subway", "metro pass", "metrocard", "presto", "clipper card",
+      "compass card", "oyster card", "upass", "u-pass", "transit pass", "parking",
+    ],
   };
   const DEFAULT_SKIPS = ["groceries", "textbooks", "medicine"];
 
@@ -109,7 +138,8 @@
         ".a-price .a-offscreen",
       ])
     );
-    return title ? { items: [{ title, price }], total: price } : null;
+    const category = firstText(["#wayfinding-breadcrumbs_feature_div", "#nav-subnav .nav-a-content"]).replace(/\s+/g, " ");
+    return title ? { items: [{ title, price, category }], total: price } : null;
   }
 
   // Cart rows carry data-producttitle / data-price / data-quantity (checked on live amazon.com/cart, Nov 2026).
@@ -159,19 +189,26 @@
     ]);
     const total = num(totalText) ?? totalByLabel();
     const currency = (totalText.match(/\b(USD|CAD|EUR|GBP|AUD)\b/) || [])[1];
-    const titles = [...document.querySelectorAll(".item-title, .lineitem-title-text")].map((el) => el.textContent.trim()).filter(Boolean);
-    const items = titles.length ? titles.map((title) => ({ title })) : [{ title: "Your order" }];
+    const items = [...document.querySelectorAll(".item-title, .lineitem-title-text")]
+      .map((el) => {
+        const row = el.closest("[class*=lineitem], [class*=item-row], .a-row, li, tr") || el.parentElement;
+        const price = num(firstText([".lineitem-price-text", ".a-color-price", ".a-price .a-offscreen"], row));
+        return { title: el.textContent.trim(), price };
+      })
+      .filter((i) => i.title);
+    if (!items.length) items.push({ title: "Your order" });
     return { items, total, currency };
   }
+
+  const labelFor = (items) => (items.length === 1 ? items[0].title : `${items[0].title} + ${items.length - 1} more`);
 
   function scrapeItem() {
     const type = pageType();
     const data = type === "product" ? scrapeProduct() : type === "cart" ? scrapeCart() : type === "checkout" ? scrapeCheckout() : null;
     if (!data) return null;
-    const names = data.items.map((i) => i.title);
     return {
       ...data,
-      label: names.length === 1 ? names[0] : `${names[0]} + ${names.length - 1} more`,
+      label: labelFor(data.items),
       site: location.hostname,
       page: type,
     };
@@ -197,20 +234,36 @@
     await chrome.storage.local.set({ wishlist: wishlist.slice(0, 100) });
   }
 
-  // Local checks that skip the check-in entirely.
-  function skipReason(settings, neverItems, item) {
-    if (neverItems.includes(item.label)) return "you asked never to be asked about this item";
+  // Skip-list filter. Works per item: items on the skip list (or that you said
+  // "never ask" about) are dropped, and the check-in only covers what's left.
+  // Returns { item, skipped: [{ title, why }] }, with item null if nothing is left.
+  function applySkipList(settings, neverItems, item) {
     const custom = String(settings.skipCustom || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-    if (custom.some((s) => location.hostname.includes(s))) return "this store is on your skip list";
+    const store = custom.find((s) => location.hostname.toLowerCase().includes(s.replace(/\s+/g, "")));
+    if (store) return { item: null, skipped: item.items.map((i) => ({ title: i.title, why: `"${store}" is on your skip list` })) };
     const cats = settings.skipCategories || DEFAULT_SKIPS;
-    const words = [...cats.flatMap((c) => SKIP_WORDS[c] || []), ...custom];
+    const words = [...cats.flatMap((c) => (SKIP_WORDS[c] || []).map((w) => [w, c])), ...custom.map((w) => [w, w])];
     // Whole words only, so "iPads" isn't "pads" and "Price" isn't "rice".
-    const esc = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const matchers = words.map((w) => new RegExp(`(^|[^a-z0-9])${esc(w)}s?($|[^a-z0-9])`, "i"));
-    const titles = item.items.map((i) => i.title);
-    const hit = (t) => words.find((w, n) => matchers[n].test(t));
-    if (titles.length && titles.every(hit)) return `everything here is on your skip list (matched "${hit(titles[0])}")`;
-    return null;
+    const escRe = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const matchers = words.map(([w, c]) => [new RegExp(`(^|[^a-z0-9])${escRe(w)}(s|es)?($|[^a-z0-9])`, "i"), w, c]);
+    const kept = [];
+    const skipped = [];
+    for (const i of item.items) {
+      if (neverItems.includes(i.title)) {
+        skipped.push({ title: i.title, why: "you asked never to be asked about it" });
+        continue;
+      }
+      const text = `${i.title} ${i.category || ""}`;
+      const hit = matchers.find(([re]) => re.test(text));
+      if (hit) skipped.push({ title: i.title, why: `${hit[2] === hit[1] ? `"${hit[1]}"` : hit[2]} is on your skip list (matched "${hit[1]}")` });
+      else kept.push(i);
+    }
+    if (!kept.length) return { item: null, skipped };
+    if (!skipped.length) return { item, skipped };
+    // Recount the total from what's left when we know the prices; otherwise keep the page total.
+    const known = kept.every((i) => i.price != null);
+    const total = known ? Math.round(kept.reduce((t, i) => t + i.price * (i.quantity || 1), 0) * 100) / 100 : item.total;
+    return { item: { ...item, items: kept, total, label: labelFor(kept) }, skipped };
   }
 
   function profileFrom(settings, history) {
@@ -400,7 +453,7 @@
       ${hint}
       <button class="btn primary" data-act="save">You’re right, I’ll save it</button>
       <button class="btn outline" data-act="court">Yes, I want it<span class="sticker">${img("ui/gavel.svg")}Goes to court</span></button>
-      <button class="btn ghost" data-act="never">Never ask about this item</button>`, peek);
+      <button class="btn ghost" data-act="never">Never ask about ${item.items.length > 1 ? "these items" : "this item"}</button>`, peek);
     $("[data-act=save]").focus();
     // Flow step 3, "Not now": the X lets the order go through, no guilt message.
     on("[data-act=close]", async () => {
@@ -409,12 +462,52 @@
     });
     on("[data-act=setgoal]", () => chrome.runtime.sendMessage({ type: "openOptions" }));
     on("[data-act=save]", () => saveIt(item, settings, history, "checkout", "panel"));
-    on("[data-act=court]", () => startTrial(item, settings, history));
+    // More than one item: pick which one to defend first.
+    on("[data-act=court]", () => (item.items.length > 1 ? showPicker(item, settings, history, note) : startTrial(item, settings, history)));
     on("[data-act=never]", async () => {
       const { neverItems } = await getStore();
-      await chrome.storage.local.set({ neverItems: [...new Set([item.label, ...neverItems])].slice(0, 500) });
+      await chrome.storage.local.set({ neverItems: [...new Set([...item.items.map((i) => i.title), ...neverItems])].slice(0, 500) });
       await logOutcome(item, "never");
       proceedWithPurchase();
+    });
+  }
+
+  // ---------- Pick an item to defend (carts with more than one item) ----------
+
+  function showPicker(cart, settings, history, note = "") {
+    let chosen = 0;
+    showPanel(`
+      <div class="panel-head"><span>Goes to court</span><button class="icon-btn" data-act="close" aria-label="Back to quick check">${img("ui/close.svg")}</button></div>
+      <div class="question">
+        <h2 class="h3">Which one do you want to defend?</h2>
+        <p class="muted">You make your case for one item. Pick the one you want most.</p>
+      </div>
+      <div class="pick-list" role="radiogroup" aria-label="Items in your cart">${cart.items
+        .map(
+          (i, n) => `<button class="pick${n === 0 ? " on" : ""}" role="radio" aria-checked="${n === 0}" data-n="${n}">
+            <span class="dot"></span><span class="pick-title">${esc(i.title)}</span><b>${i.price != null ? money(i.price * (i.quantity || 1), cart.currency) : ""}</b></button>`
+        )
+        .join("")}</div>
+      <button class="btn primary" data-act="go">Defend this one</button>
+      <button class="btn ghost" data-act="back">Back</button>`);
+    const picks = [...layer.querySelectorAll(".pick")];
+    for (const b of picks) {
+      b.onclick = () => {
+        chosen = Number(b.dataset.n);
+        for (const x of picks) {
+          x.classList.toggle("on", x === b);
+          x.setAttribute("aria-checked", String(x === b));
+        }
+      };
+    }
+    picks[0].focus();
+    const back = () => showQuickCheck(cart, settings, history, note);
+    on("[data-act=close]", back);
+    on("[data-act=back]", back);
+    on("[data-act=go]", () => {
+      const i = cart.items[chosen];
+      const one = { ...cart, items: [i], total: i.price != null ? i.price * (i.quantity || 1) : null, label: i.title, cart };
+      startTrial(one, settings, history);
     });
   }
 
@@ -440,6 +533,7 @@
           : `<button class="card row-link" data-act="goal">${ICON.flag}<span><b>Give your savings a goal</b><small>A trip, a laptop, a safety net. Every dollar you skip counts toward it.</small></span>${ICON.arrow}</button>`
       }
       <div class="card wish"><span class="thumb"></span><span>${esc(short)} is on your Money Makers wishlist.${by ? ` Revisit it after ${esc(by)}.` : ""}</span></div>
+      ${item.cart ? `<p class="note center">Take the ${esc(short)} out of your cart, then check out the rest as usual.</p>` : ""}
       <button class="btn primary" data-act="done">Done</button>`;
     if (style === "panel") showPanel(html);
     else showPage(`<div class="card-lg">${html}</div>`, "centered");
@@ -870,13 +964,16 @@
       log("No item found on this page.", { page: pageType(), path: location.pathname });
       return false;
     }
-    const skip = skipReason(settings, neverItems, item);
-    if (skip) {
-      log(`Skipping: ${skip}.`);
+    const { item: rest, skipped } = applySkipList(settings, neverItems, item);
+    for (const s of skipped) log(`Skipping "${s.title}": ${s.why}.`);
+    if (!rest) {
+      log("Everything here is on your skip list. No check-in.");
       return false;
     }
-    log("Checking in on", item);
-    showQuickCheck(item, settings, history);
+    log("Checking in on", rest);
+    const shortList = skipped.map((s) => globalThis.gicShortName(s.title)).slice(0, 2).join(" and ");
+    const note = skipped.length ? `Not counting the ${shortList}${skipped.length > 2 ? ` and ${skipped.length - 2} more` : ""}. ${skipped.length === 1 ? "It's" : "They're"} on your skip list.` : "";
+    showQuickCheck(rest, settings, history, note);
     return true;
   }
 
@@ -968,6 +1065,17 @@ img { display: block; flex: none; }
   position: relative; width: 420px; max-width: 100%; background: var(--white); border: 1px solid var(--line);
   border-radius: 24px; padding: 32px 32px 28px; display: flex; flex-direction: column; gap: 16px; animation: in .25s ease-out;
 }
+
+/* ---- pick an item to defend ---- */
+.pick-list { display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto; }
+.pick { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 12px 14px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--white); font-size: 14px; line-height: 1.35; }
+.pick:hover { border-color: var(--paper); }
+.pick.on { border-color: var(--blue); background: var(--blue-tint); }
+.pick .dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--paper); flex: none; background: var(--white); }
+.pick.on .dot { border: 5px solid var(--blue); }
+.pick-title { flex: 1; min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pick b { flex: none; color: var(--blue); }
+.pick:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 /* ---- the judge leaning over the quick check ---- */
 .peek { position: absolute; left: calc(50% - 89px); top: -90px; width: 178px; height: 110px; z-index: 2; pointer-events: none; }
