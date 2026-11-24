@@ -800,7 +800,7 @@
           <div class="prompt" aria-live="polite">
             <small>THE JUDGE</small>
             <p id="prompt"></p>
-            ${img("ui/next.svg", "next")}
+            <span class="count" id="count" aria-hidden="true" hidden></span>
           </div>
           <form class="composer" id="composer">
             <textarea id="answer" rows="1" autocomplete="off" placeholder="Type your answer to the judge…" aria-label="Your answer to the judge"></textarea>
@@ -859,9 +859,18 @@
       witnessEl.hidden = false;
       stage.classList.add("short");
     }
-    function say(role, text) {
+    // "1/2" in the corner of the judge's box when another line from the judge is coming.
+    function setCount(n, of) {
+      const el = $("#count");
+      el.hidden = !(of > 1);
+      el.textContent = `${n}/${of}`;
+    }
+    function say(role, text, [n, of] = [1, 1]) {
       record(role, text);
-      if (role === "judge") promptEl.textContent = text;
+      if (role === "judge") {
+        promptEl.textContent = text;
+        setCount(n, of);
+      }
       else if (role === "witness") showWitness(`<p>${esc(text)}</p>`);
       else if (role === "defendant") {
         // the witness steps down once you've answered their testimony
@@ -896,45 +905,23 @@
       else {
         stage.classList.add("thinking");
         promptEl.innerHTML = dots;
+        setCount(1, 1); // no counter while the judge is thinking about your answer
       }
       return () => stage.classList.remove("thinking");
     }
-    // Hold each line long enough to read (about 3 words a second, at least 2.5s).
-    // Clicking the line, or pressing Enter, moves on sooner.
-    const promptBox = $(".prompt");
-    function readPause(t) {
+    // Each line stays up long enough to read: about 3 words a second, 2.5s to 9s.
+    // You can type in the meantime; sending waits until the judge has asked the question.
+    const readPause = (t) => {
       const words = String(t || "").split(/\s+/).filter(Boolean).length;
-      const ms = Math.min(9000, Math.max(2500, 1500 + words * 330));
-      promptBox.classList.add("reading");
-      return new Promise((resolve) => {
-        const done = () => {
-          clearTimeout(timer);
-          promptBox.removeEventListener("click", done);
-          witnessEl.removeEventListener("click", done);
-          layer.removeEventListener("keydown", onKey, true);
-          promptBox.classList.remove("reading");
-          resolve();
-        };
-        const onKey = (e) => {
-          // In the answer box, typing (spaces included) just types. Enter there skips
-          // the wait but doesn't send: what you wrote stays, and the next Enter sends it.
-          if (e.target === input) {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              done();
-            }
-            return;
-          }
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            done();
-          }
-        };
-        const timer = setTimeout(done, ms);
-        promptBox.addEventListener("click", done);
-        witnessEl.addEventListener("click", done);
-        layer.addEventListener("keydown", onKey, true);
-      });
+      return wait(Math.min(9000, Math.max(2500, 1500 + words * 330)));
+    };
+    // Line 2 of 2: the judge "types" for a moment (dots, already marked 2/2), then says it.
+    async function sayNext(text, n, of) {
+      const stop = typing("judge");
+      setCount(n, of);
+      await wait(1100);
+      stop();
+      say("judge", text, [n, of]);
     }
     const fallbackNote = (err) => {
       if (warned) return;
@@ -958,12 +945,6 @@
       send.disabled = false;
       input.focus();
     }
-
-    // Opening
-    say("judge", open.opening);
-    await readPause(open.opening);
-    say("judge", open.question);
-    openInput();
 
     // The answer box grows with what you type (up to about 6 lines, then it scrolls).
     // Enter sends, Shift+Enter adds a new line.
@@ -995,10 +976,12 @@
       log("Answer scored", r.strength, r.claim, r.engaged ? "" : "(low effort)", "score", flow.score(state));
       setPatience();
       chip(...(LANDED[r.strength] || LANDED.neutral));
-      say("judge", r.acknowledge);
+      // Decide what comes next first, so we know if the judge has a second line (the next question).
+      const step = flow.next(state);
+      const pair = step.action === "ask" || step.action === "recess" ? 2 : 1;
+      say("judge", r.acknowledge, [1, pair]);
       await readPause(r.acknowledge);
 
-      const step = flow.next(state);
       if (step.action === "rule") {
         moment(step.moment);
         await readPause(step.moment);
@@ -1026,9 +1009,15 @@
       }
       state.round += 1;
       setRound();
-      say("judge", r.question);
+      await sayNext(r.question, 2, 2);
       openInput();
     };
+
+    // Opening (the answer box is already live, so you can start typing while it's read out)
+    say("judge", open.opening, [1, 2]);
+    await readPause(open.opening);
+    await sayNext(open.question, 2, 2);
+    openInput();
   }
 
   // ---------- 08 Deliberating ----------
@@ -1474,10 +1463,7 @@ label input:focus { border-color: var(--blue); }
 .prompt { position: relative; background: var(--white); border: 2px solid #2A2E35; border-radius: 14px; padding: 12px 16px 18px; filter: drop-shadow(0 4px 0 #2A2E35); display: flex; flex-direction: column; gap: 4px; }
 .prompt small { font-size: 12px; font-weight: 900; letter-spacing: .1em; color: #1E4384; }
 .prompt p { margin: 0; min-height: 23px; font-size: 18px; font-weight: 700; line-height: 1.3; color: #2A2E35; }
-.prompt .next { position: absolute; right: 14px; bottom: 9px; width: 12px; height: 10px; opacity: 0; transition: opacity .2s; }
-.prompt.reading { cursor: pointer; }
-.prompt.reading .next { opacity: 1; animation: blink 1.2s infinite; }
-.witness-card { cursor: default; }
+.prompt .count { position: absolute; right: 14px; bottom: 8px; font-size: 12px; font-weight: 800; letter-spacing: .04em; color: var(--slate); font-variant-numeric: tabular-nums; }
 .dots { display: inline-flex; gap: 4px; padding: 8px 0; }
 .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--slate); animation: blink 1s infinite; }
 .dots i:nth-child(2) { animation-delay: .15s; }
