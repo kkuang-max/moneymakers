@@ -13,11 +13,20 @@ document.addEventListener("submit", (e) => e.preventDefault());
 
 // ?multi: a mixed cart (two things to defend, plus items on the default and toiletries skip lists).
 // ?skipall: a cart where everything is on the skip list, so no check-in should appear.
+// ?vague: only "Bounty Select-A-Size" selected. Its name has no skip words, but its
+// product page (/dp/B0TEST0006, served by the test runner) is "Household Supplies".
+// ?vague2: the same plus a hoodie.
 const params = new URLSearchParams(location.search);
-if (params.has("multi") || params.has("skipall")) {
+const only = params.has("skipall") || params.has("vague");
+if (params.has("multi") || only || params.has("vague2")) {
   store.settings.skipCategories = ["groceries", "textbooks", "medicine", "toiletries"];
+  const bounty = ["B0TEST0006", "Bounty Select-A-Size, 6 Double Rolls", 13.49];
   const rows = params.has("skipall")
     ? [["B0TEST0010", "Colgate Toothpaste, 4 Pack", 12.99], ["B0TEST0011", "Organic Bananas, 2 lb", 2.49]]
+    : params.has("vague")
+    ? [bounty]
+    : params.has("vague2")
+    ? [bounty, ["B0TEST0002", "Oversized Fleece Hoodie", 64]]
     : [
         ["B0TEST0002", "Oversized Fleece Hoodie", 64],
         ["B0TEST0003", "Crest Toothpaste, 3 Pack", 9.97],
@@ -28,7 +37,7 @@ if (params.has("multi") || params.has("skipall")) {
   // that must not count as unselecting the item.
   document.addEventListener("DOMContentLoaded", () => {
     const cart = document.getElementById("sc-active-cart");
-    if (params.has("skipall")) cart.replaceChildren();
+    if (only || params.has("vague2")) cart.replaceChildren();
     for (const [asin, title, price, selected = true] of rows) {
       const row = document.createElement("div");
       row.className = "sc-list-item";

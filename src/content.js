@@ -60,7 +60,7 @@
       "body wash", "hand wash", "face wash", "cleanser", "lotion", "moisturizer", "lip balm", "tampon", "menstrual pad", "maxi pad", "menstrual",
       "razor", "razor blade", "shaving cream", "toilet paper", "paper towel", "tissue", "wipes", "diaper", "cotton swab", "q-tips",
       "hand sanitizer", "sanitizer", "laundry detergent", "detergent", "dish soap", "dishwasher pod", "trash bag", "personal care",
-      "oral care",
+      "oral care", "household supplies", "paper & plastic", "bath & bathing accessories", "shave & hair removal", "feminine care",
     ],
     transit: [
       "transit", "bus pass", "bus ticket", "train ticket", "subway", "metro pass", "metrocard", "presto", "clipper card",
@@ -167,6 +167,7 @@
       if (!title) continue;
       items.push({
         title,
+        asin,
         price: num(row.dataset.price) ?? num(firstText([".a-price .a-offscreen", ".sc-product-price"], row)),
         quantity: parseInt(row.dataset.quantity, 10) || 1,
       });
@@ -224,6 +225,87 @@
       site: location.hostname,
       page: type,
     };
+  }
+
+  // ---------- item categories ----------
+  // Cart rows don't say what department an item is in, so as soon as the cart opens we
+  // look each item up on its product page (Amazon's breadcrumb, e.g. "Health & Household ›
+  // Household Supplies") and remember it. The skip list then matches on name + category.
+  const CAT_KEY = "itemCategories";
+  let catCache = null;
+  const loadCats = async () => (catCache ??= (await chrome.storage.local.get({ [CAT_KEY]: {} }))[CAT_KEY]);
+  const catOf = (i) => catCache?.[i.asin ? `a:${i.asin}` : ""] ?? catCache?.[`t:${i.title}`];
+
+  function categoryFromDoc(doc) {
+    const box = doc.querySelector("#wayfinding-breadcrumbs_feature_div");
+    const parts = box ? [...box.querySelectorAll("a, li")].map((e) => e.textContent.trim()).filter((t) => t && t !== "›") : [];
+    const crumbs = [...new Set(parts)].join(" › ") || box?.textContent || "";
+    const dept = doc.querySelector("#nav-subnav")?.getAttribute("data-category") || "";
+    return `${crumbs} ${dept}`.replace(/\s+/g, " ").trim();
+  }
+
+  async function rememberCats(entries) {
+    await loadCats();
+    for (const [key, cat] of entries) catCache[key] = cat;
+    const keys = Object.keys(catCache);
+    if (keys.length > 400) for (const k of keys.slice(0, keys.length - 400)) delete catCache[k];
+    try {
+      await chrome.storage.local.set({ [CAT_KEY]: catCache });
+    } catch {}
+  }
+
+  const pendingLookups = new Map(); // asin -> promise
+  function lookUpCategories(items) {
+    const todo = items.filter((i) => i.asin && catOf(i) == null && !pendingLookups.has(i.asin));
+    let running = 0;
+    const queue = [...todo];
+    const next = () => {
+      const i = queue.shift();
+      if (!i) return;
+      running++;
+      const p = fetch(`/dp/${i.asin}`, { credentials: "include" })
+        .then((r) => (r.ok ? r.text() : ""))
+        .then((html) => categoryFromDoc(new DOMParser().parseFromString(html, "text/html")))
+        .catch(() => "")
+        .then((cat) => {
+          log(`Category for "${globalThis.gicShortName(i.title)}":`, cat || "(not found)");
+          return rememberCats([[`a:${i.asin}`, cat], [`t:${i.title}`, cat]]);
+        })
+        .finally(() => {
+          running--;
+          next();
+        });
+      pendingLookups.set(i.asin, p);
+    };
+    for (let n = 0; n < Math.min(3, queue.length); n++) next();
+    return Promise.all(items.map((i) => pendingLookups.get(i.asin)).filter(Boolean));
+  }
+
+  // Fill in categories before the skip list runs, waiting briefly for lookups still in flight.
+  async function withCategories(item) {
+    await loadCats();
+    const lookups = lookUpCategories(item.items);
+    await Promise.race([lookups, wait(2500)]);
+    return { ...item, items: item.items.map((i) => ({ ...i, category: i.category || catOf(i) || "" })) };
+  }
+
+  // On page load: cart -> look up every item now; product page -> remember this one.
+  async function learnOnLoad() {
+    try {
+      await loadCats();
+      const type = pageType();
+      if (type === "cart") {
+        const data = scrapeCart();
+        if (data) lookUpCategories(data.items);
+      } else if (type === "product") {
+        const asin = (location.pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i) || [])[1];
+        const title = firstText(["#productTitle"]);
+        const cat = categoryFromDoc(document);
+        if (title && cat) rememberCats([...(asin ? [[`a:${asin}`, cat]] : []), [`t:${title}`, cat]]);
+      }
+    } catch (e) {
+      log("Category lookup skipped:", e?.message);
+    }
   }
 
   // ---------- storage ----------
@@ -995,7 +1077,8 @@
   async function maybeCheckIn() {
     if (isCleared()) return noCheckIn("you already went through a check-in for this checkout.", { kind: "pass" });
     const { settings, history, neverItems } = await getStore();
-    const item = scrapeItem();
+    const scraped = scrapeItem();
+    const item = scraped && (await withCategories(scraped));
     if (!item) return noCheckIn("couldn't read the items on this page.", { kind: "noitems", path: location.pathname });
     const { item: rest, skipped } = applySkipList(settings, neverItems, item);
     for (const s of skipped) log(`Skipping "${s.title}": ${s.why}.`);
@@ -1057,6 +1140,7 @@
 
   // Flow step 2: the nudge appears when you click a checkout button, not before.
   log("Loaded on", pageType() || "an untracked page", location.pathname);
+  learnOnLoad();
 
   // ---------- icons ----------
 
