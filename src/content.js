@@ -797,11 +797,7 @@
           </div>
           <div class="transcript" id="log" role="log" aria-label="Transcript" hidden></div>
           <div class="witness-card" id="witness" hidden></div>
-          <div class="prompt" aria-live="polite">
-            <small>THE JUDGE</small>
-            <p id="prompt"></p>
-            <span class="count" id="count" aria-hidden="true" hidden></span>
-          </div>
+          <div class="prompts" id="judgeSays" aria-live="polite"></div>
           <form class="composer" id="composer">
             <textarea id="answer" rows="1" autocomplete="off" placeholder="Type your answer to the judge…" aria-label="Your answer to the judge"></textarea>
             <button class="send" aria-label="Send" disabled>${img("ui/arrow.svg")}</button>
@@ -814,7 +810,7 @@
     const input = $("#answer");
     const send = $(".send");
     const roundEl = $("#round");
-    const promptEl = $("#prompt");
+    const judgeBox = $("#judgeSays");
     const witnessEl = $("#witness");
     const chipEl = $("#chip");
     const setRound = () => (roundEl.textContent = `Round ${state.round} of ${state.totalRounds}`);
@@ -859,17 +855,22 @@
       witnessEl.hidden = false;
       stage.classList.add("short");
     }
-    // "1/2" in the corner of the judge's box when another line from the judge is coming.
-    function setCount(n, of) {
-      const el = $("#count");
-      el.hidden = !(of > 1);
-      el.textContent = `${n}/${of}`;
-    }
+    // The judge's lines are chat bubbles. When a second line is coming, its bubble shows
+    // the typing dots beneath the one you're reading ("1/2" above, "2/2" below).
+    const DOTS = `<span class="dots"><i></i><i></i><i></i></span>`;
+    const bubble = (html, n, of, pending = false) =>
+      `<div class="prompt${pending ? " pending" : ""}"><small>THE JUDGE</small><p>${html}</p>${
+        of > 1 ? `<span class="count" aria-hidden="true">${n}/${of}</span>` : ""
+      }</div>`;
     function say(role, text, [n, of] = [1, 1]) {
       record(role, text);
       if (role === "judge") {
-        promptEl.textContent = text;
-        setCount(n, of);
+        if (n === 1) judgeBox.innerHTML = bubble(esc(text), 1, of) + (of > 1 ? bubble(DOTS, 2, of, true) : "");
+        else {
+          const pending = judgeBox.querySelector(".prompt.pending");
+          if (pending) pending.outerHTML = bubble(esc(text), n, of);
+          else judgeBox.insertAdjacentHTML("beforeend", bubble(esc(text), n, of));
+        }
       }
       else if (role === "witness") showWitness(`<p>${esc(text)}</p>`);
       else if (role === "defendant") {
@@ -904,8 +905,7 @@
       if (who === "witness") showWitness(dots);
       else {
         stage.classList.add("thinking");
-        promptEl.innerHTML = dots;
-        setCount(1, 1); // no counter while the judge is thinking about your answer
+        judgeBox.innerHTML = bubble(dots, 1, 1); // the judge thinking about your answer
       }
       return () => stage.classList.remove("thinking");
     }
@@ -915,12 +915,12 @@
       const words = String(t || "").split(/\s+/).filter(Boolean).length;
       return wait(Math.min(9000, Math.max(2500, 1500 + words * 330)));
     };
-    // Line 2 of 2: the judge "types" for a moment (dots, already marked 2/2), then says it.
+    // Line 2 of 2: its bubble has been showing the dots under line 1; after a short beat it fills in.
     async function sayNext(text, n, of) {
-      const stop = typing("judge");
-      setCount(n, of);
-      await wait(1100);
-      stop();
+      if (!judgeBox.querySelector(".prompt.pending")) judgeBox.insertAdjacentHTML("beforeend", bubble(DOTS, n, of, true));
+      stage.classList.add("thinking");
+      await wait(900);
+      stage.classList.remove("thinking");
       say("judge", text, [n, of]);
     }
     const fallbackNote = (err) => {
@@ -1460,6 +1460,8 @@ label input:focus { border-color: var(--blue); }
 .witness-card.future .testimony small { color: #1E4384; }
 .testimony b { font-size: 16px; font-weight: 700; color: #2A2E35; }
 .testimony p { margin: 0; font-size: 14px; font-weight: 500; line-height: 1.4; color: #3E4450; }
+.prompts { display: flex; flex-direction: column; gap: 12px; }
+.prompt.pending { animation: in .25s ease-out; }
 .prompt { position: relative; background: var(--white); border: 2px solid #2A2E35; border-radius: 14px; padding: 12px 16px 18px; filter: drop-shadow(0 4px 0 #2A2E35); display: flex; flex-direction: column; gap: 4px; }
 .prompt small { font-size: 12px; font-weight: 900; letter-spacing: .1em; color: #1E4384; }
 .prompt p { margin: 0; min-height: 23px; font-size: 18px; font-weight: 700; line-height: 1.3; color: #2A2E35; }
